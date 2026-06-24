@@ -34,10 +34,11 @@ jobs:
 
       - name: Setup JFrog CLI (OIDC)
         uses: jfrog/setup-jfrog-cli@v4
-        with: { version: latest }
+        with:
+          version: latest
+          oidc-provider-name: github-docportal
         env:
           JF_URL: ${{ env.JF_URL }}
-          JF_OIDC_PROVIDER_NAME: github-docportal
 
       - name: Restore & build
         run: |
