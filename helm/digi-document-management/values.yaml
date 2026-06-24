@@ -1,0 +1,17 @@
+replicaCount: 1   # single replica: writes to local PVC-backed storage + SQLite
+image:
+  repository: mcodevisionaryorg.jfrog.io/digi-docker/digi-document-management
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+imagePullSecrets:
+  - name: jfrog-docker-pull
+service:
+  type: ClusterIP
+  port: 8080
+persistence:
+  enabled: true
+  size: 10Gi
+  mountPath: /data
+resources:
+  requests: { cpu: 100m, memory: 256Mi }
+  limits: { cpu: "1", memory: 512Mi }

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: digi-document-management
+description: Digitalization document management backend (storage + metadata DB + audit)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
