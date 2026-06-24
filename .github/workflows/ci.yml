@@ -37,11 +37,9 @@ jobs:
           JF_URL: ${{ env.JF_URL }}
           JF_OIDC_PROVIDER_NAME: github-docportal
 
-      - name: Configure NuGet resolution from JFrog
-        run: jf dotnetc --repo-resolve "$NUGET_REPO" --project "$PROJECT_KEY"
-
       - name: Restore & build
         run: |
+          jf dotnetc --repo-resolve "$NUGET_REPO" --project "$PROJECT_KEY"
           jf dotnet restore --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}"
           dotnet build -c Release --no-restore
 
