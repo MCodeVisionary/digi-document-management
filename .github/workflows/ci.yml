@@ -12,9 +12,9 @@ permissions:
 env:
   JF_URL: https://mcodevisionaryorg.jfrog.io
   NUGET_REPO:   docportal-doc-management-nuget-dev-virtual
-  DOCKER_REPO:  docportal-doc-management-docker-dev-local
-  HELM_REPO:    docportal-doc-management-helm-dev-local
-  GENERIC_REPO: docportal-doc-management-generic-dev-local
+  DOCKER_REPO:  docportal-doc-management-docker-dev-virtual
+  HELM_REPO:    docportal-doc-management-helm-dev-virtual
+  GENERIC_REPO: docportal-doc-management-generic-dev-virtual
   APP_KEY:      docportal
   PROJECT_KEY:  docportal
   IMAGE_NAME:   digi-document-management
