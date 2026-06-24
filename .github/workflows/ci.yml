@@ -59,12 +59,12 @@ jobs:
       - name: SonarQube scan
         continue-on-error: true
         env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+          SONAR_TOKEN: dummy-sonar-token
+          SONAR_HOST_URL: http://localhost:9000
         run: |
           dotnet tool install --global dotnet-sonarscanner || true
           export PATH="$PATH:$HOME/.dotnet/tools"
-          dotnet sonarscanner begin /k:"digitalization_digi-document-management" \
+          dotnet sonarscanner begin /k:"docportal_digi-document-management" \
             /d:sonar.host.url="$SONAR_HOST_URL" /d:sonar.login="$SONAR_TOKEN" || true
           dotnet build -c Release --no-incremental || true
           dotnet sonarscanner end /d:sonar.login="$SONAR_TOKEN" || true
@@ -135,7 +135,7 @@ jobs:
 
       - name: Evidence — SonarQube (on docker package)
         continue-on-error: true
-        env: { SONAR_TOKEN: "${{ secrets.SONAR_TOKEN }}" }
+        env: { SONAR_TOKEN: "dummy-sonar-token" }
         run: |
           jf evd create \
             --package-name "$IMAGE_NAME" --package-version "$VERSION" --package-repo-name "$DOCKER_REPO" \
