@@ -7,7 +7,7 @@ on:
 
 permissions:
   id-token: write
-  contents: read
+  contents: write
 
 env:
   JF_URL: https://mcodevisionaryorg.jfrog.io
@@ -23,10 +23,12 @@ env:
 jobs:
   build-test-publish:
     runs-on: ubuntu-latest
-    env:
-      VERSION: ${{ format('0.1.0-{0}', github.run_number) }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set version from file
+        run: echo "VERSION=$(cat VERSION)" >> $GITHUB_ENV
+
       - uses: actions/setup-dotnet@v4
         with: { dotnet-version: '8.0.x' }
 
@@ -167,3 +169,15 @@ jobs:
             --project "$PROJECT_KEY" \
             --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}" \
           || jf at vc "$APP_KEY" "$VERSION" --build "$IMAGE_NAME/${{ github.run_number }}"
+
+      - name: Bump patch version
+        if: success()
+        run: |
+          CURRENT=$(cat VERSION)
+          NEW=$(echo "$CURRENT" | awk -F. -v OFS=. '{$NF = $NF + 1; print}')
+          echo "$NEW" > VERSION
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add VERSION
+          git commit -m "chore: bump version to $NEW [skip ci]"
+          git push
