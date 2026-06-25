@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 env:
-  JF_URL: https://mcodevisionaryorg.jfrog.io
+  JF_URL: ${{ vars.JF_URL }}
   NUGET_REPO:   docportal-doc-management-nuget-dev-virtual
   DOCKER_REPO:  docportal-doc-management-docker-dev-virtual
   HELM_REPO:    docportal-doc-management-helm-dev-virtual
