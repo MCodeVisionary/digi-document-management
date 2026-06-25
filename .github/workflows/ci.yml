@@ -157,6 +157,7 @@ jobs:
             --predicate reports/test-results-predicate.json \
             --predicate-type "https://in-toto.io/attestation/test-result/v0.1" \
             --attach-local reports/performance.json \
+            --attach-artifactory-temp-path "$GENERIC_REPO/$IMAGE_NAME/${{ github.run_number }}/evidence-temp" \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
 
       - name: Evidence — SonarQube (on docker package)
