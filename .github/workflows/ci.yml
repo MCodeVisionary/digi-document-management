@@ -42,6 +42,9 @@ jobs:
         env:
           JF_URL: ${{ env.JF_URL }}
 
+      - name: Verify JFrog connectivity (OIDC health check)
+        run: jf rt ping
+
       - name: Restore & build
         run: |
           jf dotnetc --repo-resolve "$NUGET_REPO" --project "$PROJECT_KEY"
