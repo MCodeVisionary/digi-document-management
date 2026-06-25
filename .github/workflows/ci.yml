@@ -125,6 +125,9 @@ jobs:
           JSON
 
       # ---------- PUBLISH (docker + helm + reports) ----------
+      - name: Docker login to JFrog registry
+        run: jf docker login "${JF_URL#https://}"
+
       - name: Build & push Docker image
         run: |
           docker build -t "${JF_URL#https://}/$DOCKER_REPO/$IMAGE_NAME:$VERSION" \
