@@ -4,6 +4,11 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      debug:
+        description: 'Enable debug logging'
+        type: boolean
+        default: false
 
 permissions:
   id-token: write
@@ -23,6 +28,10 @@ env:
 jobs:
   build-test-publish:
     runs-on: ubuntu-latest
+    env:
+      JFROG_CLI_LOG_LEVEL:          ${{ inputs.debug && 'DEBUG' || 'INFO' }}
+      DOTNET_VERBOSITY:             ${{ inputs.debug && 'diagnostic' || 'minimal' }}
+      Logging__LogLevel__Default:   ${{ inputs.debug && 'Debug' || 'Information' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -48,8 +57,8 @@ jobs:
       - name: Restore & build
         run: |
           jf dotnetc --repo-resolve "$NUGET_REPO" --project "$PROJECT_KEY" --server-id "$SETUP_JFROG_CLI_SERVER_IDS"
-          jf dotnet restore --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}"
-          dotnet build -c Release --no-restore
+          jf dotnet restore --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}" -- --verbosity "$DOTNET_VERBOSITY"
+          dotnet build -c Release --no-restore --verbosity "$DOTNET_VERBOSITY"
 
       - name: Commit NuGet lockfiles if generated
         run: |
@@ -62,11 +71,12 @@ jobs:
       - name: Unit tests
         run: dotnet test tests/DigiDocumentManagement.UnitTests \
               --logger "trx;LogFileName=unit.trx" --results-directory reports \
-              --collect:"XPlat Code Coverage"
+              --collect:"XPlat Code Coverage" --verbosity "$DOTNET_VERBOSITY"
 
       - name: Functional tests
         run: dotnet test tests/DigiDocumentManagement.FunctionalTests \
-              --logger "trx;LogFileName=functional.trx" --results-directory reports
+              --logger "trx;LogFileName=functional.trx" --results-directory reports \
+              --verbosity "$DOTNET_VERBOSITY"
 
       # ---------- SONARQUBE ----------
       - name: SonarQube scan
