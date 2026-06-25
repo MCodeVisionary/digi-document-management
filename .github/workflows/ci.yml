@@ -30,7 +30,9 @@ jobs:
         run: echo "VERSION=$(cat VERSION)" >> $GITHUB_ENV
 
       - uses: actions/setup-dotnet@v4
-        with: { dotnet-version: '8.0.x' }
+        with:
+          dotnet-version: '8.0.x'
+          cache: true
 
       - name: Setup JFrog CLI (OIDC)
         uses: jfrog/setup-jfrog-cli@v4
@@ -45,6 +47,13 @@ jobs:
           jf dotnetc --repo-resolve "$NUGET_REPO" --project "$PROJECT_KEY"
           jf dotnet restore --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}"
           dotnet build -c Release --no-restore
+
+      - name: Commit NuGet lockfiles if generated
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add **/packages.lock.json
+          git diff --staged --quiet || (git commit -m "chore: update NuGet lockfiles [skip ci]" && git push)
 
       # ---------- UNIT + FUNCTIONAL TESTS ----------
       - name: Unit tests
