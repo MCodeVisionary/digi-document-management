@@ -193,6 +193,8 @@ jobs:
       # ---------- APPTRUST ----------
       - name: Create AppTrust application version
         run: |
+          jf apptrust app-create "$APP_KEY" \
+            --application-name "DocPortal" --project "$PROJECT_KEY" || true
           jf apptrust version-create "$APP_KEY" "$VERSION" \
             --source-type-builds "name=$IMAGE_NAME, id=${{ github.run_number }}"
 
