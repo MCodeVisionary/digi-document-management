@@ -194,9 +194,7 @@ jobs:
       - name: Create AppTrust application version
         run: |
           jf apptrust version-create "$APP_KEY" "$VERSION" \
-            --project "$PROJECT_KEY" \
-            --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}" \
-          || jf at vc "$APP_KEY" "$VERSION" --build "$IMAGE_NAME/${{ github.run_number }}"
+            --source-type-builds "name=$IMAGE_NAME, id=${{ github.run_number }}"
 
       - name: Bump patch version
         if: success()
