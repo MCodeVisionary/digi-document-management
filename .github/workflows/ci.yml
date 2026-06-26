@@ -19,7 +19,8 @@ env:
   NUGET_REPO:   docportal-doc-management-nuget-dev-virtual
   DOCKER_REPO:  docportal-doc-management-docker-dev-virtual
   HELM_REPO:    docportal-doc-management-helm-dev-virtual
-  GENERIC_REPO: docportal-doc-management-generic-dev-virtual
+  GENERIC_REPO:       docportal-doc-management-generic-dev-virtual
+  GENERIC_LOCAL_REPO: docportal-doc-management-generic-dev-local
   APP_KEY:      docportal
   PROJECT_KEY:  docportal
   IMAGE_NAME:   digi-document-management
@@ -157,7 +158,7 @@ jobs:
             --predicate reports/test-results-predicate.json \
             --predicate-type "https://in-toto.io/attestation/test-result/v0.1" \
             --attach-local reports/performance.json \
-            --attach-artifactory-temp-path "$GENERIC_REPO/$IMAGE_NAME/${{ github.run_number }}/evidence-temp" \
+            --attach-artifactory-temp-path "$GENERIC_LOCAL_REPO/$IMAGE_NAME/${{ github.run_number }}/evidence-temp" \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
 
       - name: Evidence — SonarQube (on docker package)
