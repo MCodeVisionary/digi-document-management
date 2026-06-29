@@ -55,6 +55,11 @@ jobs:
       - name: Verify JFrog connectivity (OIDC health check)
         run: jf rt ping
 
+      - name: Curation audit — nuget
+        run: |
+          jf dotnetc --repo-resolve "$NUGET_REPO" --project "$PROJECT_KEY" --server-id "$SETUP_JFROG_CLI_SERVER_IDS"
+          jf curation-audit
+
       - name: Restore & build
         run: |
           jf dotnetc --repo-resolve "$NUGET_REPO" --project "$PROJECT_KEY" --server-id "$SETUP_JFROG_CLI_SERVER_IDS"
