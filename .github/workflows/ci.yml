@@ -34,12 +34,12 @@ jobs:
       DOTNET_VERBOSITY:             ${{ inputs.debug && 'diagnostic' || 'minimal' }}
       Logging__LogLevel__Default:   ${{ inputs.debug && 'Debug' || 'Information' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set version from file
         run: echo "VERSION=$(cat VERSION)" >> $GITHUB_ENV
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '8.0.x'
           cache: true
