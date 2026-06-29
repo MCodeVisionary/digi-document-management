@@ -161,16 +161,6 @@ jobs:
             --attach-artifactory-temp-path "$GENERIC_LOCAL_REPO/$IMAGE_NAME/${{ github.run_number }}/evidence-temp" \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
 
-      - name: Evidence — SonarQube (on docker package)
-        continue-on-error: true
-        env: { SONAR_TOKEN: "dummy-sonar-token" }
-        run: |
-          jf evd create \
-            --package-name "$IMAGE_NAME" --package-version "$VERSION" --package-repo-name "$DOCKER_REPO" \
-            --provider-id sonar \
-            --predicate-type "https://jfrog.com/evidence/static-analysis/v1" \
-            --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
-
       - name: Evidence — SLSA provenance (on build)
         run: |
           cat > provenance.json <<JSON
@@ -193,8 +183,9 @@ jobs:
       # ---------- APPTRUST ----------
       - name: Create AppTrust application version
         run: |
-          jf apptrust app-create "$APP_KEY" \
-            --application-name "DocPortal" --project "$PROJECT_KEY" || true
+          jf api "/apptrust/api/v1/applications/$APP_KEY" 2>/dev/null | grep -q '"key"' \
+            || jf apptrust app-create "$APP_KEY" \
+                 --application-name "DocPortal" --project "$PROJECT_KEY"
           jf apptrust version-create "$APP_KEY" "$VERSION" \
             --source-type-builds "name=$IMAGE_NAME, id=${{ github.run_number }}"
 
