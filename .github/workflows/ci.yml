@@ -180,6 +180,31 @@ jobs:
             --predicate build-sig.json --predicate-type "https://jfrog.com/evidence/build-signature/v1" \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
 
+      # Evidence on the Helm chart
+      - name: Evidence — test results (helm chart)
+        run: |
+          jf evd create \
+            --package-name "$IMAGE_NAME" --package-version "$VERSION" \
+            --package-repo-name "$HELM_REPO" \
+            --predicate reports/test-results-predicate.json \
+            --predicate-type "https://in-toto.io/attestation/test-result/v0.1" \
+            --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
+
+      - name: Create release bundle
+        run: |
+          jf release-bundle-v2 create "$IMAGE_NAME" "$VERSION" \
+            --source-type builds \
+            --builds "name=$IMAGE_NAME,number=${{ github.run_number }}" \
+            --project "$PROJECT_KEY"
+
+      - name: Evidence — test results (release bundle)
+        run: |
+          jf evd create \
+            --release-bundle-name "$IMAGE_NAME" --release-bundle-version "$VERSION" \
+            --predicate reports/test-results-predicate.json \
+            --predicate-type "https://in-toto.io/attestation/test-result/v0.1" \
+            --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
+
       # ---------- APPTRUST ----------
       - name: Create AppTrust application version
         run: |
