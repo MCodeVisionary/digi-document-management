@@ -189,8 +189,12 @@ jobs:
       - name: Publish build-info
         run: jf rt build-publish "$IMAGE_NAME" "${{ github.run_number }}" --project "$PROJECT_KEY"
 
-      - name: Trigger Xray scan
-        run: jf rt build-scan "$IMAGE_NAME" "${{ github.run_number }}" --project "$PROJECT_KEY" --fail=false
+      - name: Xray scan (wait for completion)
+        run: |
+          OUTPUT=$(jf rt build-scan "$IMAGE_NAME" "${{ github.run_number }}" --project "$PROJECT_KEY" 2>&1) && RC=0 || RC=$?
+          echo "$OUTPUT"
+          # RC=3 means scan completed but Xray found policy violations — non-blocking
+          if [ $RC -ne 0 ] && [ $RC -ne 3 ]; then exit $RC; fi
 
       - name: Upload test reports
         run: |
