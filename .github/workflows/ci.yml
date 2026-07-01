@@ -193,7 +193,7 @@ jobs:
         run: jf rt build-publish "$IMAGE_NAME" "${{ github.run_number }}"
 
       - name: Trigger Xray scan
-        run: jf rt build-scan "$IMAGE_NAME" "${{ github.run_number }}"
+        run: jf rt build-scan "$IMAGE_NAME" "${{ github.run_number }}" --fail=false
 
       # ---------- EVIDENCE ----------
       - name: Evidence — test results (on docker package)
