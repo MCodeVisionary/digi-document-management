@@ -197,7 +197,7 @@ jobs:
 
       - name: Create release bundle
         run: |
-          jf release-bundle-v2 create "$IMAGE_NAME" "$VERSION" \
+          jf rbv2c "$IMAGE_NAME" "$VERSION" \
             --source-type builds \
             --builds "name=$IMAGE_NAME,number=${{ github.run_number }}" \
             --project "$PROJECT_KEY"
