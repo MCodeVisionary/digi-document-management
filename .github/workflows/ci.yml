@@ -319,9 +319,18 @@ jobs:
           elif [ $RC -ne 0 ]; then exit $RC; fi
 
           if [ -n "$CP_VER" ] && [ -n "$DC_VER" ] && [ -n "$DM_VER" ]; then
-            jf apptrust version-create "$APP_KEY" "$DOCPORTAL_VER" \
+            OUTPUT=$(jf apptrust version-create "$APP_KEY" "$DOCPORTAL_VER" \
               --source-type-release-bundles \
-              "name=digi-client-portal, version=${CP_VER}, project-key=${PROJECT_KEY}; name=digi-document-converter, version=${DC_VER}, project-key=${PROJECT_KEY}; name=digi-document-management, version=${DM_VER}, project-key=${PROJECT_KEY}"
+              "name=digi-client-portal, version=${CP_VER}, project-key=${PROJECT_KEY}; name=digi-document-converter, version=${DC_VER}, project-key=${PROJECT_KEY}; name=digi-document-management, version=${DM_VER}, project-key=${PROJECT_KEY}" 2>&1) && RC=0 || RC=$?
+            echo "$OUTPUT"
+            if echo "$OUTPUT" | grep -qi "not found\|source not found"; then
+              echo "Skipping AppTrust version — one or more bundles not yet available (stale manifest)"
+              echo "  client-portal=${CP_VER} doc-converter=${DC_VER} doc-management=${DM_VER}"
+            elif echo "$OUTPUT" | grep -qi "already exists"; then
+              echo "AppTrust version $DOCPORTAL_VER already exists — skipping"
+            elif [ $RC -ne 0 ]; then
+              exit $RC
+            fi
           else
             echo "Skipping DocPortal version — not all services in manifest yet"
             echo "  client-portal=${CP_VER:-MISSING} doc-converter=${DC_VER:-MISSING} doc-management=${DM_VER:-MISSING}"
