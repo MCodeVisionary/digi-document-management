@@ -44,6 +44,9 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - name: Pin .NET SDK to 8.0 (prevent system .NET 10 from being picked up)
+        run: echo '{"sdk":{"version":"8.0.0","rollForward":"latestPatch"}}' > "$GITHUB_WORKSPACE/global.json"
+
       - name: Setup JFrog CLI (OIDC)
         uses: jfrog/setup-jfrog-cli@v4
         with:
