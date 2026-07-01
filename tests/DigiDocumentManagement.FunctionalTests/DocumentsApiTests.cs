@@ -1,14 +1,37 @@
 using System.Net;
 using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Xunit;
 
 namespace DigiDocumentManagement.FunctionalTests;
 
-public class DocumentsApiTests : IClassFixture<WebApplicationFactory<Program>>
+public class DocumentsApiTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
 {
     private readonly HttpClient _client;
-    public DocumentsApiTests(WebApplicationFactory<Program> factory) => _client = factory.CreateClient();
+    private readonly string _tempDir;
+    private readonly string _tempDb;
+
+    public DocumentsApiTests(WebApplicationFactory<Program> factory)
+    {
+        _tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        _tempDb  = Path.Combine(Path.GetTempPath(), $"{Path.GetRandomFileName()}.db");
+        Directory.CreateDirectory(_tempDir);
+
+        _client = factory.WithWebHostBuilder(b => b.ConfigureAppConfiguration((_, cfg) =>
+            cfg.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:Db"] = $"Data Source={_tempDb}",
+                ["Storage:RootPath"]     = _tempDir,
+            }))).CreateClient();
+    }
+
+    public void Dispose()
+    {
+        _client.Dispose();
+        try { File.Delete(_tempDb); } catch { }
+        try { Directory.Delete(_tempDir, recursive: true); } catch { }
+    }
 
     [Fact]
     public async Task Health_returns_ok()

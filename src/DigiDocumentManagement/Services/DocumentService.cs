@@ -2,6 +2,7 @@ using DigiDocumentManagement.Data;
 using DigiDocumentManagement.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DigiDocumentManagement.Services;
 
@@ -12,13 +13,13 @@ public class DocumentService
 
     private readonly AppDbContext _db;
     private readonly IStorageService _storage;
-    private readonly ILogger<DocumentService> _logger;
+    private readonly ILogger<DocumentService> _logger = NullLogger<DocumentService>.Instance;
 
-    public DocumentService(AppDbContext db, IStorageService storage, ILogger<DocumentService> logger)
+    public DocumentService(AppDbContext db, IStorageService storage, ILogger<DocumentService>? logger = null)
     {
         _db      = db;
         _storage = storage;
-        _logger  = logger;
+        _logger  = logger ?? NullLogger<DocumentService>.Instance;
     }
 
     public static bool IsValidType(string docType) => Allowed.Contains(docType);
