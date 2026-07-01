@@ -238,7 +238,8 @@ jobs:
       - name: Create release bundle
         run: |
           OUTPUT=$(jf rbc "$IMAGE_NAME" "$VERSION" \
-            --source-type-builds "name=$IMAGE_NAME, id=${{ github.run_number }}" 2>&1) && RC=0 || RC=$?
+            --source-type-builds "name=$IMAGE_NAME, id=${{ github.run_number }}" \
+            --project "$PROJECT_KEY" 2>&1) && RC=0 || RC=$?
           echo "$OUTPUT"
           if echo "$OUTPUT" | grep -q "already exists"; then
             echo "Release bundle $IMAGE_NAME/$VERSION already exists — skipping (re-run at same version)"
@@ -248,28 +249,28 @@ jobs:
 
       - name: Promote release bundle → DEV
         run: |
-          OUTPUT=$(jf rbp "$IMAGE_NAME" "$VERSION" DEV 2>&1) && RC=0 || RC=$?
+          OUTPUT=$(jf rbp "$IMAGE_NAME" "$VERSION" DEV --project "$PROJECT_KEY" 2>&1) && RC=0 || RC=$?
           echo "$OUTPUT"
           if echo "$OUTPUT" | grep -qi "already\|409"; then echo "already at DEV"
           elif [ $RC -ne 0 ]; then exit $RC; fi
 
       - name: Promote release bundle → QA
         run: |
-          OUTPUT=$(jf rbp "$IMAGE_NAME" "$VERSION" QA 2>&1) && RC=0 || RC=$?
+          OUTPUT=$(jf rbp "$IMAGE_NAME" "$VERSION" QA --project "$PROJECT_KEY" 2>&1) && RC=0 || RC=$?
           echo "$OUTPUT"
           if echo "$OUTPUT" | grep -qi "already\|409"; then echo "already at QA"
           elif [ $RC -ne 0 ]; then exit $RC; fi
 
       - name: Promote release bundle → STAGING
         run: |
-          OUTPUT=$(jf rbp "$IMAGE_NAME" "$VERSION" STAGING 2>&1) && RC=0 || RC=$?
+          OUTPUT=$(jf rbp "$IMAGE_NAME" "$VERSION" STAGING --project "$PROJECT_KEY" 2>&1) && RC=0 || RC=$?
           echo "$OUTPUT"
           if echo "$OUTPUT" | grep -qi "already\|409"; then echo "already at STAGING"
           elif [ $RC -ne 0 ]; then exit $RC; fi
 
       - name: Promote release bundle → PROD
         run: |
-          OUTPUT=$(jf rbp "$IMAGE_NAME" "$VERSION" PROD 2>&1) && RC=0 || RC=$?
+          OUTPUT=$(jf rbp "$IMAGE_NAME" "$VERSION" PROD --project "$PROJECT_KEY" 2>&1) && RC=0 || RC=$?
           echo "$OUTPUT"
           if echo "$OUTPUT" | grep -qi "already\|409"; then echo "already at PROD"
           elif [ $RC -ne 0 ]; then exit $RC; fi
@@ -278,6 +279,7 @@ jobs:
         run: |
           jf evd create \
             --release-bundle "$IMAGE_NAME" --release-bundle-version "$VERSION" \
+            --project "$PROJECT_KEY" \
             --predicate reports/test-results-predicate.json \
             --predicate-type "https://jfrog.com/evidence/testing-results/v1" \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
@@ -315,7 +317,7 @@ jobs:
           if [ -n "$CP_VER" ] && [ -n "$DC_VER" ] && [ -n "$DM_VER" ]; then
             jf apptrust version-create "$APP_KEY" "$DOCPORTAL_VER" \
               --source-type-release-bundles \
-              "name=digi-client-portal, version=${CP_VER}; name=digi-document-converter, version=${DC_VER}; name=digi-document-management, version=${DM_VER}"
+              "name=digi-client-portal, version=${CP_VER}, project-key=${PROJECT_KEY}; name=digi-document-converter, version=${DC_VER}, project-key=${PROJECT_KEY}; name=digi-document-management, version=${DM_VER}, project-key=${PROJECT_KEY}"
           else
             echo "Skipping DocPortal version — not all services in manifest yet"
             echo "  client-portal=${CP_VER:-MISSING} doc-converter=${DC_VER:-MISSING} doc-management=${DM_VER:-MISSING}"
