@@ -197,8 +197,14 @@ jobs:
 
       - name: Create release bundle
         run: |
-          jf rbc "$IMAGE_NAME" "$VERSION" \
-            --source-type-builds "name=$IMAGE_NAME, id=${{ github.run_number }}"
+          OUTPUT=$(jf rbc "$IMAGE_NAME" "$VERSION" \
+            --source-type-builds "name=$IMAGE_NAME, id=${{ github.run_number }}" 2>&1) && RC=0 || RC=$?
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -q "already exists"; then
+            echo "Release bundle $IMAGE_NAME/$VERSION already exists — skipping (re-run at same version)"
+          elif [ $RC -ne 0 ]; then
+            exit $RC
+          fi
 
       - name: Evidence — test results (release bundle)
         run: |
