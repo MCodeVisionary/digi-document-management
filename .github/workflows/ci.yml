@@ -218,18 +218,43 @@ jobs:
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
 
       # ---------- APPTRUST ----------
-      - name: Create AppTrust application version
+      - name: Update DocPortal manifest and create AppTrust version
         run: |
+          MANIFEST_REPO="docportal-client-portal-generic-dev-local"
+          MANIFEST_KEY="docportal/manifest.json"
+
+          jf rt download "${MANIFEST_REPO}/${MANIFEST_KEY}" . --flat 2>/dev/null || true
+          [ -f manifest.json ] || echo '{}' > manifest.json
+
+          jq --arg svc "$IMAGE_NAME" --arg ver "$VERSION" \
+            '.[$svc] = $ver | .["docportal-version"] = ((.["docportal-version"] // "0" | tonumber) + 1 | tostring)' \
+            manifest.json > manifest.json.tmp && mv manifest.json.tmp manifest.json
+          cat manifest.json
+
+          jf rt upload manifest.json "${MANIFEST_REPO}/${MANIFEST_KEY}"
+
+          CP_VER=$(jq -r '.["digi-client-portal"] // ""' manifest.json)
+          DC_VER=$(jq -r '.["digi-document-converter"] // ""' manifest.json)
+          DM_VER=$(jq -r '.["digi-document-management"] // ""' manifest.json)
+          DOCPORTAL_VER=$(jq -r '.["docportal-version"] // "1"' manifest.json)
+
+          echo "DocPortal v${DOCPORTAL_VER} = client-portal:${CP_VER} + doc-converter:${DC_VER} + doc-management:${DM_VER}"
+
           OUTPUT=$(jf apptrust app-create "$APP_KEY" \
             --application-name "DocPortal" --project "$PROJECT_KEY" 2>&1) && RC=0 || RC=$?
           echo "$OUTPUT"
           if echo "$OUTPUT" | grep -q "already exists"; then
             echo "AppTrust application $APP_KEY already exists — skipping"
-          elif [ $RC -ne 0 ]; then
-            exit $RC
+          elif [ $RC -ne 0 ]; then exit $RC; fi
+
+          if [ -n "$CP_VER" ] && [ -n "$DC_VER" ] && [ -n "$DM_VER" ]; then
+            jf apptrust version-create "$APP_KEY" "$DOCPORTAL_VER" \
+              --source-type-release-bundles \
+              "name=digi-client-portal, version=${CP_VER}; name=digi-document-converter, version=${DC_VER}; name=digi-document-management, version=${DM_VER}"
+          else
+            echo "Skipping DocPortal version — not all services in manifest yet"
+            echo "  client-portal=${CP_VER:-MISSING} doc-converter=${DC_VER:-MISSING} doc-management=${DM_VER:-MISSING}"
           fi
-          jf apptrust version-create "$APP_KEY" "$VERSION" \
-            --source-type-builds "name=$IMAGE_NAME, id=${{ github.run_number }}"
 
       - name: Bump patch version
         if: success()
