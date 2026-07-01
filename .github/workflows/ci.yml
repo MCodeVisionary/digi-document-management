@@ -220,9 +220,14 @@ jobs:
       # ---------- APPTRUST ----------
       - name: Create AppTrust application version
         run: |
-          jf api "/apptrust/api/v1/applications/$APP_KEY" 2>/dev/null | grep -q '"key"' \
-            || jf apptrust app-create "$APP_KEY" \
-                 --application-name "DocPortal" --project "$PROJECT_KEY"
+          OUTPUT=$(jf apptrust app-create "$APP_KEY" \
+            --application-name "DocPortal" --project "$PROJECT_KEY" 2>&1) && RC=0 || RC=$?
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -q "already exists"; then
+            echo "AppTrust application $APP_KEY already exists — skipping"
+          elif [ $RC -ne 0 ]; then
+            exit $RC
+          fi
           jf apptrust version-create "$APP_KEY" "$VERSION" \
             --source-type-builds "name=$IMAGE_NAME, id=${{ github.run_number }}"
 
