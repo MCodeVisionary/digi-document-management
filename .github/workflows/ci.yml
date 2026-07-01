@@ -186,16 +186,16 @@ jobs:
           jf rt upload "digi-document-management-${VERSION}.tgz" "$HELM_LOCAL_REPO/" \
             --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}"
 
-      - name: Upload test reports
-        run: |
-          jf rt upload "reports/*" "$GENERIC_LOCAL_REPO/$IMAGE_NAME/${{ github.run_number }}/reports/" \
-            --flat=false
-
       - name: Publish build-info
         run: jf rt build-publish "$IMAGE_NAME" "${{ github.run_number }}" --project "$PROJECT_KEY"
 
       - name: Trigger Xray scan
         run: jf rt build-scan "$IMAGE_NAME" "${{ github.run_number }}" --project "$PROJECT_KEY" --fail=false
+
+      - name: Upload test reports
+        run: |
+          jf rt upload "reports/*" "$GENERIC_LOCAL_REPO/$IMAGE_NAME/${{ github.run_number }}/reports/" \
+            --flat=false
 
       # ---------- EVIDENCE ----------
       - name: Evidence — test results (on docker package)
