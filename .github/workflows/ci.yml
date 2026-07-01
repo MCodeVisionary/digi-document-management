@@ -44,8 +44,8 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Pin .NET SDK to 8.0 (prevent system .NET 10 from being picked up)
-        run: echo '{"sdk":{"version":"8.0.100","rollForward":"latestFeatureBand"}}' > "$GITHUB_WORKSPACE/global.json"
+      - name: Remove .NET 9 and 10 SDKs (JFrog CLI must use .NET 8 MSBuild)
+        run: sudo rm -rf /usr/share/dotnet/sdk/9.0.* /usr/share/dotnet/sdk/10.0.*
 
       - name: Setup JFrog CLI (OIDC)
         uses: jfrog/setup-jfrog-cli@v4
