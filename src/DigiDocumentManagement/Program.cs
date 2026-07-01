@@ -15,6 +15,8 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
+app.Logger.LogInformation("Hello World from digi-document-management");
+
 app.UseExceptionHandler(errApp =>
 {
     errApp.Run(async ctx =>
