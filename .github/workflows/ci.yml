@@ -59,6 +59,32 @@ jobs:
       - name: Verify JFrog connectivity (OIDC health check)
         run: jf rt ping
 
+      - name: Ensure DEV lifecycle environment has repositories
+        continue-on-error: true
+        run: |
+          CFG=~/.jfrog/jfrog-cli.conf.v6
+          ACCESS_TOKEN=$(jq -r '
+            if .servers | type == "array" then
+              .servers[] | select(.serverId == "setup-jfrog-cli-server") | .accessToken
+            else
+              .servers["setup-jfrog-cli-server"].accessToken
+            end' "$CFG" 2>/dev/null)
+          [ -z "$ACCESS_TOKEN" ] && { echo "Could not read access token — skipping"; exit 0; }
+          ALL_REPOS='["docportal-client-portal-docker-dev-local","docportal-client-portal-generic-dev-local","docportal-client-portal-npm-dev-virtual","docportal-client-portal-pypi-dev-virtual","docportal-doc-converter-docker-dev-local","docportal-doc-converter-nuget-dev-virtual","docportal-doc-converter-generic-dev-local","docportal-doc-management-docker-dev-local","docportal-doc-management-generic-dev-local","docportal-doc-management-nuget-dev-virtual"]'
+          PAYLOAD="{\"name\":\"DEV\",\"repository_keys\":${ALL_REPOS}}"
+          HTTP=$(curl -s -o /tmp/lc.json -w "%{http_code}" \
+            -X POST "${JF_URL}/lifecycle/api/v2/environments" \
+            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+            -H "Content-Type: application/json" -d "$PAYLOAD")
+          echo "POST → $HTTP"; cat /tmp/lc.json
+          if [ "$HTTP" = "409" ]; then
+            HTTP2=$(curl -s -o /tmp/lc2.json -w "%{http_code}" \
+              -X PUT "${JF_URL}/lifecycle/api/v2/environments/DEV" \
+              -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+              -H "Content-Type: application/json" -d "$PAYLOAD")
+            echo "PUT → $HTTP2"; cat /tmp/lc2.json
+          fi
+
       - name: Curation audit — nuget
         continue-on-error: true
         run: |

@@ -1,5 +1,7 @@
 # digi-document-management
 
+> Release bundles promoted to DEV lifecycle stage via `jf rbp`.
+
 Backend document service for the **Digitalization** project. Stores document
 binaries on **local machine storage** and metadata in a **lightweight SQLite
 database** (users, documents, storage location, upload timestamp, who uploaded,
