@@ -189,7 +189,7 @@ jobs:
       - name: Upload test reports
         run: |
           jf rt upload "reports/*" "$GENERIC_LOCAL_REPO/$IMAGE_NAME/${{ github.run_number }}/reports/" \
-            --flat=false --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}"
+            --flat=false
 
       - name: Publish build-info
         run: jf rt build-publish "$IMAGE_NAME" "${{ github.run_number }}" --project "$PROJECT_KEY"
