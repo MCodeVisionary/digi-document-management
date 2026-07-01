@@ -198,8 +198,7 @@ jobs:
       - name: Create release bundle
         run: |
           jf rbc "$IMAGE_NAME" "$VERSION" \
-            --source-type builds \
-            --builds "name=$IMAGE_NAME,number=${{ github.run_number }}" \
+            --source-type-builds "name=$IMAGE_NAME, id=${{ github.run_number }}" \
             --project "$PROJECT_KEY"
 
       - name: Evidence — test results (release bundle)
