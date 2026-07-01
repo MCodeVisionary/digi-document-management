@@ -17,7 +17,8 @@ permissions:
 env:
   JF_URL: ${{ vars.JF_URL }}
   NUGET_REPO:   docportal-doc-management-nuget-dev-virtual
-  DOCKER_REPO:  docportal-doc-management-docker-dev-virtual
+  DOCKER_REPO:       docportal-doc-management-docker-dev-virtual
+  DOCKER_LOCAL_REPO: docportal-doc-management-docker-dev-local
   HELM_REPO:    docportal-doc-management-helm-dev-virtual
   GENERIC_REPO:       docportal-doc-management-generic-dev-virtual
   GENERIC_LOCAL_REPO: docportal-doc-management-generic-dev-local
@@ -42,7 +43,6 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '8.0.x'
-          cache: true
 
       - name: Setup JFrog CLI (OIDC)
         uses: jfrog/setup-jfrog-cli@v4
@@ -159,9 +159,9 @@ jobs:
       - name: Evidence — test results (on docker package)
         run: |
           jf evd create \
-            --package-name "$IMAGE_NAME" --package-version "$VERSION" --package-repo-name "$DOCKER_REPO" \
+            --package-name "$IMAGE_NAME" --package-version "$VERSION" --package-repo-name "$DOCKER_LOCAL_REPO" \
             --predicate reports/test-results-predicate.json \
-            --predicate-type "https://in-toto.io/attestation/test-result/v0.1" \
+            --predicate-type "https://jfrog.com/evidence/testing-results/v1" \
             --attach-local reports/performance.json \
             --attach-artifactory-temp-path "$GENERIC_LOCAL_REPO/$IMAGE_NAME/${{ github.run_number }}/evidence-temp" \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
@@ -192,7 +192,7 @@ jobs:
             --package-name "$IMAGE_NAME" --package-version "$VERSION" \
             --package-repo-name "$HELM_REPO" \
             --predicate reports/test-results-predicate.json \
-            --predicate-type "https://in-toto.io/attestation/test-result/v0.1" \
+            --predicate-type "https://jfrog.com/evidence/testing-results/v1" \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
 
       - name: Create release bundle
@@ -203,9 +203,9 @@ jobs:
       - name: Evidence — test results (release bundle)
         run: |
           jf evd create \
-            --release-bundle-name "$IMAGE_NAME" --release-bundle-version "$VERSION" \
+            --release-bundle "$IMAGE_NAME" --release-bundle-version "$VERSION" \
             --predicate reports/test-results-predicate.json \
-            --predicate-type "https://in-toto.io/attestation/test-result/v0.1" \
+            --predicate-type "https://jfrog.com/evidence/testing-results/v1" \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
 
       # ---------- APPTRUST ----------
