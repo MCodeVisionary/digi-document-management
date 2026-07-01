@@ -19,7 +19,8 @@ env:
   NUGET_REPO:   docportal-doc-management-nuget-dev-virtual
   DOCKER_REPO:       docportal-doc-management-docker-dev-virtual
   DOCKER_LOCAL_REPO: docportal-doc-management-docker-dev-local
-  HELM_REPO:    docportal-doc-management-helm-dev-virtual
+  HELM_REPO:       docportal-doc-management-helm-dev-virtual
+  HELM_LOCAL_REPO: docportal-doc-management-helm-dev-local
   GENERIC_REPO:       docportal-doc-management-generic-dev-virtual
   GENERIC_LOCAL_REPO: docportal-doc-management-generic-dev-local
   APP_KEY:      docportal
@@ -175,18 +176,18 @@ jobs:
         run: |
           docker build -t "${JF_URL#https://}/$DOCKER_REPO/$IMAGE_NAME:$VERSION" \
             --metadata-file build-metadata --output=type=image --push .
-          jf rt build-docker-create "$DOCKER_REPO" --image-file build-metadata \
+          jf rt build-docker-create "$DOCKER_LOCAL_REPO" --image-file build-metadata \
             --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}"
 
       - name: Package & push Helm chart
         run: |
           helm package helm/digi-document-management --version "$VERSION" --app-version "$VERSION"
-          jf rt upload "digi-document-management-${VERSION}.tgz" "$HELM_REPO/" \
+          jf rt upload "digi-document-management-${VERSION}.tgz" "$HELM_LOCAL_REPO/" \
             --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}"
 
       - name: Upload test reports
         run: |
-          jf rt upload "reports/*" "$GENERIC_REPO/$IMAGE_NAME/${{ github.run_number }}/reports/" \
+          jf rt upload "reports/*" "$GENERIC_LOCAL_REPO/$IMAGE_NAME/${{ github.run_number }}/reports/" \
             --flat=false --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}"
 
       - name: Publish build-info
@@ -232,7 +233,7 @@ jobs:
         run: |
           jf evd create \
             --package-name "$IMAGE_NAME" --package-version "$VERSION" \
-            --package-repo-name "$HELM_REPO" \
+            --package-repo-name "$HELM_LOCAL_REPO" \
             --predicate reports/test-results-predicate.json \
             --predicate-type "https://jfrog.com/evidence/testing-results/v1" \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
