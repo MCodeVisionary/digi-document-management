@@ -62,28 +62,22 @@ jobs:
       - name: Ensure DEV lifecycle environment has repositories
         continue-on-error: true
         run: |
-          CFG=~/.jfrog/jfrog-cli.conf.v6
-          ACCESS_TOKEN=$(jq -r '
-            if .servers | type == "array" then
-              .servers[] | select(.serverId == "setup-jfrog-cli-server") | .accessToken
-            else
-              .servers["setup-jfrog-cli-server"].accessToken
-            end' "$CFG" 2>/dev/null)
-          [ -z "$ACCESS_TOKEN" ] && { echo "Could not read access token — skipping"; exit 0; }
           ALL_REPOS='["docportal-client-portal-docker-dev-local","docportal-client-portal-generic-dev-local","docportal-client-portal-npm-dev-virtual","docportal-client-portal-pypi-dev-virtual","docportal-doc-converter-docker-dev-local","docportal-doc-converter-nuget-dev-virtual","docportal-doc-converter-generic-dev-local","docportal-doc-management-docker-dev-local","docportal-doc-management-generic-dev-local","docportal-doc-management-nuget-dev-virtual"]'
           PAYLOAD="{\"name\":\"DEV\",\"repository_keys\":${ALL_REPOS}}"
-          HTTP=$(curl -s -o /tmp/lc.json -w "%{http_code}" \
-            -X POST "${JF_URL}/lifecycle/api/v2/environments" \
-            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-            -H "Content-Type: application/json" -d "$PAYLOAD")
-          echo "POST → $HTTP"; cat /tmp/lc.json
-          if [ "$HTTP" = "409" ]; then
-            HTTP2=$(curl -s -o /tmp/lc2.json -w "%{http_code}" \
-              -X PUT "${JF_URL}/lifecycle/api/v2/environments/DEV" \
-              -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-              -H "Content-Type: application/json" -d "$PAYLOAD")
-            echo "PUT → $HTTP2"; cat /tmp/lc2.json
-          fi
+          for PATH in \
+            "api/lifecycle/environments" \
+            "api/lifecycle/stage_config" \
+            "api/v2/lifecycle/environments"; do
+            echo "=== POST artifactory/${PATH} ==="
+            HTTP=$(jf rt curl -s -w "\n%{http_code}" -o /tmp/lc.json \
+              -X POST "$PATH" -H "Content-Type: application/json" -d "$PAYLOAD" 2>&1 | tail -1)
+            cat /tmp/lc.json 2>/dev/null; echo "→ $HTTP"
+            [ "$HTTP" = "200" ] || [ "$HTTP" = "201" ] && { echo "Created DEV via $PATH"; break; }
+            [ "$HTTP" = "409" ] && {
+              jf rt curl -s -X PUT "${PATH}/DEV" -H "Content-Type: application/json" -d "$PAYLOAD" 2>&1 | cat
+              echo "Updated DEV via $PATH"; break
+            }
+          done
 
       - name: Curation audit — nuget
         continue-on-error: true
