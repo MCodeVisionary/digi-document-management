@@ -175,6 +175,7 @@ jobs:
               "digest": {"sha1":"${{ github.sha }}"}, "entryPoint":".github/workflows/ci.yml" } } }
           JSON
           jf evd create --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}" \
+            --project "$PROJECT_KEY" \
             --predicate provenance.json --predicate-type "https://slsa.dev/provenance/v1" \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
 
@@ -182,6 +183,7 @@ jobs:
         run: |
           echo "{ \"actor\": \"${{ github.actor }}\", \"date\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\" }" > build-sig.json
           jf evd create --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}" \
+            --project "$PROJECT_KEY" \
             --predicate build-sig.json --predicate-type "https://jfrog.com/evidence/build-signature/v1" \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
 
@@ -205,6 +207,7 @@ jobs:
         run: |
           jf evd create \
             --release-bundle-name "$IMAGE_NAME" --release-bundle-version "$VERSION" \
+            --project "$PROJECT_KEY" \
             --predicate reports/test-results-predicate.json \
             --predicate-type "https://in-toto.io/attestation/test-result/v0.1" \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
