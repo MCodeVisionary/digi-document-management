@@ -225,6 +225,16 @@ jobs:
             exit $RC
           fi
 
+      - name: Promote release bundle to DEV
+        run: |
+          OUTPUT=$(jf rbp "$IMAGE_NAME" "$VERSION" DEV 2>&1) && RC=0 || RC=$?
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -qi "already\|409"; then
+            echo "Release bundle $IMAGE_NAME/$VERSION already promoted to DEV — skipping"
+          elif [ $RC -ne 0 ]; then
+            exit $RC
+          fi
+
       - name: Evidence — test results (release bundle)
         run: |
           jf evd create \
