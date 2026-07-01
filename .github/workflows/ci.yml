@@ -153,7 +153,7 @@ jobs:
             --flat=false --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}"
 
       - name: Publish build-info
-        run: jf rt build-publish "$IMAGE_NAME" "${{ github.run_number }}" --project "$PROJECT_KEY"
+        run: jf rt build-publish "$IMAGE_NAME" "${{ github.run_number }}"
 
       # ---------- EVIDENCE ----------
       - name: Evidence — test results (on docker package)
@@ -175,7 +175,6 @@ jobs:
               "digest": {"sha1":"${{ github.sha }}"}, "entryPoint":".github/workflows/ci.yml" } } }
           JSON
           jf evd create --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}" \
-            --project "$PROJECT_KEY" \
             --predicate provenance.json --predicate-type "https://slsa.dev/provenance/v1" \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
 
@@ -183,7 +182,6 @@ jobs:
         run: |
           echo "{ \"actor\": \"${{ github.actor }}\", \"date\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\" }" > build-sig.json
           jf evd create --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}" \
-            --project "$PROJECT_KEY" \
             --predicate build-sig.json --predicate-type "https://jfrog.com/evidence/build-signature/v1" \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
 
@@ -200,14 +198,12 @@ jobs:
       - name: Create release bundle
         run: |
           jf rbc "$IMAGE_NAME" "$VERSION" \
-            --source-type-builds "name=$IMAGE_NAME, id=${{ github.run_number }}" \
-            --project "$PROJECT_KEY"
+            --source-type-builds "name=$IMAGE_NAME, id=${{ github.run_number }}"
 
       - name: Evidence — test results (release bundle)
         run: |
           jf evd create \
             --release-bundle-name "$IMAGE_NAME" --release-bundle-version "$VERSION" \
-            --project "$PROJECT_KEY" \
             --predicate reports/test-results-predicate.json \
             --predicate-type "https://in-toto.io/attestation/test-result/v0.1" \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
