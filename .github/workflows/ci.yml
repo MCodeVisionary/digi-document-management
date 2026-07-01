@@ -59,25 +59,26 @@ jobs:
       - name: Verify JFrog connectivity (OIDC health check)
         run: jf rt ping
 
-      - name: Ensure DEV lifecycle environment has repositories
+      - name: Ensure lifecycle environments have repositories
         continue-on-error: true
         run: |
-          ALL_REPOS='["docportal-client-portal-docker-dev-local","docportal-client-portal-generic-dev-local","docportal-client-portal-npm-dev-virtual","docportal-client-portal-pypi-dev-virtual","docportal-doc-converter-docker-dev-local","docportal-doc-converter-nuget-dev-virtual","docportal-doc-converter-generic-dev-local","docportal-doc-management-docker-dev-local","docportal-doc-management-generic-dev-local","docportal-doc-management-nuget-dev-virtual"]'
-          PAYLOAD="{\"name\":\"DEV\",\"repository_keys\":${ALL_REPOS}}"
-          for PATH in \
-            "api/lifecycle/environments" \
-            "api/lifecycle/stage_config" \
-            "api/v2/lifecycle/environments"; do
-            echo "=== POST artifactory/${PATH} ==="
-            HTTP=$(jf rt curl -s -w "\n%{http_code}" -o /tmp/lc.json \
-              -X POST "$PATH" -H "Content-Type: application/json" -d "$PAYLOAD" 2>&1 | tail -1)
-            cat /tmp/lc.json 2>/dev/null; echo "→ $HTTP"
-            [ "$HTTP" = "200" ] || [ "$HTTP" = "201" ] && { echo "Created DEV via $PATH"; break; }
-            [ "$HTTP" = "409" ] && {
-              jf rt curl -s -X PUT "${PATH}/DEV" -H "Content-Type: application/json" -d "$PAYLOAD" 2>&1 | cat
-              echo "Updated DEV via $PATH"; break
-            }
-          done
+          create_or_update() {
+            local NAME=$1 REPOS=$2
+            local PAYLOAD="{\"name\":\"${NAME}\",\"repository_keys\":${REPOS}}"
+            local HTTP=$(jf rt curl -s -w "\n%{http_code}" -o /tmp/lc.json \
+              -X POST "api/lifecycle/environments" \
+              -H "Content-Type: application/json" -d "$PAYLOAD" 2>&1 | tail -1)
+            cat /tmp/lc.json 2>/dev/null; echo "→ $NAME POST $HTTP"
+            if [ "$HTTP" = "409" ]; then
+              jf rt curl -s -X PUT "api/lifecycle/environments/${NAME}" \
+                -H "Content-Type: application/json" -d "$PAYLOAD" 2>&1
+              echo "→ $NAME PUT done"
+            fi
+          }
+          create_or_update DEV     '["docportal-client-portal-docker-dev-local","docportal-client-portal-generic-dev-local","docportal-client-portal-helm-dev-local","docportal-client-portal-npm-dev-local","docportal-client-portal-pypi-dev-local","docportal-doc-converter-docker-dev-local","docportal-doc-converter-generic-dev-local","docportal-doc-converter-helm-dev-local","docportal-doc-converter-nuget-dev-local","docportal-doc-management-docker-dev-local","docportal-doc-management-generic-dev-local","docportal-doc-management-helm-dev-local","docportal-doc-management-nuget-dev-local"]'
+          create_or_update QA      '["docportal-client-portal-docker-qa-local","docportal-client-portal-helm-qa-local","docportal-client-portal-npm-qa-local","docportal-client-portal-pypi-qa-local","docportal-doc-converter-docker-qa-local","docportal-doc-converter-helm-qa-local","docportal-doc-converter-nuget-qa-local","docportal-doc-management-docker-qa-local","docportal-doc-management-helm-qa-local","docportal-doc-management-nuget-qa-local"]'
+          create_or_update STAGING '["docportal-client-portal-docker-staging-local","docportal-client-portal-helm-staging-local","docportal-client-portal-npm-staging-local","docportal-client-portal-pypi-staging-local","docportal-doc-converter-docker-staging-local","docportal-doc-converter-helm-staging-local","docportal-doc-converter-nuget-staging-local","docportal-doc-management-docker-staging-local","docportal-doc-management-helm-staging-local","docportal-doc-management-nuget-staging-local"]'
+          create_or_update PROD    '["docportal-client-portal-docker-prod-local","docportal-client-portal-helm-prod-local","docportal-client-portal-npm-prod-local","docportal-client-portal-pypi-prod-local","docportal-doc-converter-docker-prod-local","docportal-doc-converter-helm-prod-local","docportal-doc-converter-nuget-prod-local","docportal-doc-management-docker-prod-local","docportal-doc-management-helm-prod-local","docportal-doc-management-nuget-prod-local"]'
 
       - name: Curation audit — nuget
         continue-on-error: true
@@ -245,15 +246,33 @@ jobs:
             exit $RC
           fi
 
-      - name: Promote release bundle to DEV
+      - name: Promote release bundle → DEV
         run: |
           OUTPUT=$(jf rbp "$IMAGE_NAME" "$VERSION" DEV 2>&1) && RC=0 || RC=$?
           echo "$OUTPUT"
-          if echo "$OUTPUT" | grep -qi "already\|409"; then
-            echo "Release bundle $IMAGE_NAME/$VERSION already promoted to DEV — skipping"
-          elif [ $RC -ne 0 ]; then
-            exit $RC
-          fi
+          if echo "$OUTPUT" | grep -qi "already\|409"; then echo "already at DEV"
+          elif [ $RC -ne 0 ]; then exit $RC; fi
+
+      - name: Promote release bundle → QA
+        run: |
+          OUTPUT=$(jf rbp "$IMAGE_NAME" "$VERSION" QA 2>&1) && RC=0 || RC=$?
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -qi "already\|409"; then echo "already at QA"
+          elif [ $RC -ne 0 ]; then exit $RC; fi
+
+      - name: Promote release bundle → STAGING
+        run: |
+          OUTPUT=$(jf rbp "$IMAGE_NAME" "$VERSION" STAGING 2>&1) && RC=0 || RC=$?
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -qi "already\|409"; then echo "already at STAGING"
+          elif [ $RC -ne 0 ]; then exit $RC; fi
+
+      - name: Promote release bundle → PROD
+        run: |
+          OUTPUT=$(jf rbp "$IMAGE_NAME" "$VERSION" PROD 2>&1) && RC=0 || RC=$?
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -qi "already\|409"; then echo "already at PROD"
+          elif [ $RC -ne 0 ]; then exit $RC; fi
 
       - name: Evidence — test results (release bundle)
         run: |
