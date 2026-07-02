@@ -15,7 +15,7 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-app.Logger.LogInformation("Hello World from digi-document-management v0.1.7");
+app.Logger.LogInformation("Hello World from digi-document-management v0.1.8");
 
 app.UseExceptionHandler(errApp =>
 {

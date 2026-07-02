@@ -334,8 +334,10 @@ jobs:
       - name: "[STAGING] Install k6"
         run: |
           K6_VER=v0.55.0
-          curl -sSL "https://github.com/grafana/k6/releases/download/${K6_VER}/k6-${K6_VER}-linux-amd64.tar.gz" \
-            | tar -xzf - --wildcards "*/k6" --strip-components=1 -C /usr/local/bin
+          curl -fsSL "https://github.com/grafana/k6/releases/download/${K6_VER}/k6-${K6_VER}-linux-amd64.tar.gz" \
+            -o /tmp/k6.tar.gz
+          tar -xzf /tmp/k6.tar.gz -C /tmp
+          sudo mv "/tmp/k6-${K6_VER}-linux-amd64/k6" /usr/local/bin/k6
           k6 version
 
       - name: "[STAGING] Performance test — k6 (real)"
