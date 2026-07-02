@@ -488,9 +488,23 @@ jobs:
               echo "Skipping AppTrust version — one or more bundles not yet available (stale manifest)"
               echo "  client-portal=${CP_VER} doc-converter=${DC_VER} doc-management=${DM_VER}"
             elif echo "$OUTPUT" | grep -qi "already exists"; then
-              echo "AppTrust version $DOCPORTAL_VER already exists — skipping"
+              echo "AppTrust version $DOCPORTAL_VER already exists — promoting"
+              PROMOTE=1
             elif [ $RC -ne 0 ]; then
               exit $RC
+            else
+              PROMOTE=1
+            fi
+            if [ "${PROMOTE:-0}" = "1" ]; then
+              for STAGE in QA STAGING PROD; do
+                PROMO=$(jf apptrust version-promote "$APP_KEY" "$DOCPORTAL_VER" "$STAGE" 2>&1) && PRC=0 || PRC=$?
+                echo "$PROMO"
+                if echo "$PROMO" | grep -qi "already\|409"; then
+                  echo "AppTrust version $DOCPORTAL_VER already at or past $STAGE"
+                elif [ $PRC -ne 0 ]; then
+                  echo "Warning: could not promote AppTrust version $DOCPORTAL_VER to $STAGE — $PROMO"
+                fi
+              done
             fi
           else
             echo "Skipping DocPortal version — not all services in manifest yet"
