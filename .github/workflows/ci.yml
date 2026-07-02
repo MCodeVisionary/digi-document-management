@@ -480,6 +480,7 @@ jobs:
 
           if [ -n "$CP_VER" ] && [ -n "$DC_VER" ] && [ -n "$DM_VER" ]; then
             OUTPUT=$(jf apptrust version-create "$APP_KEY" "$DOCPORTAL_VER" \
+              --project "$PROJECT_KEY" \
               --source-type-release-bundles \
               "name=digi-client-portal, version=${CP_VER}, project-key=${PROJECT_KEY}; name=digi-document-converter, version=${DC_VER}, project-key=${PROJECT_KEY}; name=digi-document-management, version=${DM_VER}, project-key=${PROJECT_KEY}" 2>&1) && RC=0 || RC=$?
             echo "$OUTPUT"
