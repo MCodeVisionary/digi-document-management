@@ -88,6 +88,9 @@ jobs:
           jf nugetc --repo-resolve "$NUGET_REPO" --server-id-resolve "$SETUP_JFROG_CLI_SERVER_IDS"
           jf curation-audit
 
+      # ---------------------------------------------------------------
+      # BUILD  (restore + compile; tests run per-stage below)
+      # ---------------------------------------------------------------
       - name: Restore & build
         run: |
           jf dotnetc --repo-resolve "$NUGET_REPO" --server-id-resolve "$SETUP_JFROG_CLI_SERVER_IDS"
@@ -101,29 +104,12 @@ jobs:
           git add **/packages.lock.json
           git diff --staged --quiet || (git commit -m "chore: update NuGet lockfiles [skip ci]" && git push)
 
-      # ---------- UNIT + FUNCTIONAL TESTS ----------
       - name: Security audit — nuget
         continue-on-error: true
         run: |
           jf dotnetc --repo-resolve "$NUGET_REPO" --server-id-resolve "$SETUP_JFROG_CLI_SERVER_IDS"
           jf audit --nuget
 
-      - name: Unit tests
-        run: |
-          dotnet test tests/DigiDocumentManagement.UnitTests \
-            --logger "trx;LogFileName=unit.trx" \
-            --results-directory reports \
-            --collect "XPlat Code Coverage" \
-            --verbosity "$DOTNET_VERBOSITY"
-
-      - name: Functional tests
-        run: |
-          dotnet test tests/DigiDocumentManagement.FunctionalTests \
-            --logger "trx;LogFileName=functional.trx" \
-            --results-directory reports \
-            --verbosity "$DOTNET_VERBOSITY"
-
-      # ---------- SONARQUBE ----------
       - name: SonarQube scan
         continue-on-error: true
         env:
@@ -137,39 +123,9 @@ jobs:
           dotnet build -c Release --no-incremental || true
           dotnet sonarscanner end /d:sonar.login="$SONAR_TOKEN" || true
 
-      # ---------- MOCK SMOKE + PERFORMANCE ----------
-      - name: Generate smoke + performance results (mocked)
-        run: |
-          mkdir -p reports
-          cat > reports/smoke.json <<'JSON'
-          { "suite": "smoke", "service": "digi-document-management",
-            "passed": 2, "failed": 0,
-            "cases": [
-              {"name":"health 200","status":"passed"},
-              {"name":"list requires owner -> 400","status":"passed"}
-            ] }
-          JSON
-          cat > reports/performance.json <<'JSON'
-          { "suite": "performance", "tool": "k6", "service": "digi-document-management",
-            "vus": 50, "duration_s": 60, "http_reqs": 29871, "http_req_failed_rate": 0.002,
-            "p95_ms": 142, "checks_passed": true, "thresholds_passed": true }
-          JSON
-
-      - name: Assemble test-result predicate
-        run: |
-          cat > reports/test-results-predicate.json <<JSON
-          { "name": "digi-document-management test results", "result": "PASSED",
-            "build": "${VERSION}",
-            "suites": {
-              "unit": {"tool":"xunit","passed":true},
-              "functional": {"tool":"xunit+WebApplicationFactory","passed":true},
-              "smoke": {"tool":"bash+curl","source":"reports/smoke.json"},
-              "performance": {"tool":"k6","source":"reports/performance.json"}
-            },
-            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)" }
-          JSON
-
-      # ---------- PUBLISH (docker + helm + reports) ----------
+      # ---------------------------------------------------------------
+      # PUBLISH ARTIFACTS to JFrog  (docker, helm)
+      # ---------------------------------------------------------------
       - name: Docker login to JFrog registry
         run: jf docker login "${JF_URL#https://}"
 
@@ -196,22 +152,9 @@ jobs:
           # RC=3 means scan completed but Xray found policy violations — non-blocking
           if [ $RC -ne 0 ] && [ $RC -ne 3 ]; then exit $RC; fi
 
-      - name: Upload test reports
-        run: |
-          jf rt upload "reports/*" "$GENERIC_LOCAL_REPO/$IMAGE_NAME/${{ github.run_number }}/reports/" \
-            --flat=false
-
-      # ---------- EVIDENCE ----------
-      - name: Evidence — test results (on docker package)
-        run: |
-          jf evd create \
-            --package-name "$IMAGE_NAME" --package-version "$VERSION" --package-repo-name "$DOCKER_LOCAL_REPO" \
-            --predicate reports/test-results-predicate.json \
-            --predicate-type "https://jfrog.com/evidence/testing-results/v1" \
-            --attach-local reports/performance.json \
-            --attach-artifactory-temp-path "$GENERIC_LOCAL_REPO/$IMAGE_NAME/${{ github.run_number }}/evidence-temp" \
-            --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
-
+      # ---------------------------------------------------------------
+      # EVIDENCE — SLSA provenance + build signature (build-level)
+      # ---------------------------------------------------------------
       - name: Evidence — SLSA provenance (on build)
         run: |
           cat > provenance.json <<JSON
@@ -233,13 +176,67 @@ jobs:
             --predicate build-sig.json --predicate-type "https://jfrog.com/evidence/build-signature/v1" \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
 
-      # Evidence on the Helm chart
-      - name: Evidence — test results (helm chart)
+      # ═══════════════════════════════════════════════════════════════
+      # DEV STAGE — unit tests gate DEV → QA promotion
+      # ═══════════════════════════════════════════════════════════════
+      - name: "[DEV] Unit tests (dotnet)"
         run: |
+          mkdir -p reports
+          dotnet test tests/DigiDocumentManagement.UnitTests \
+            --logger "trx;LogFileName=unit.trx" \
+            --results-directory reports \
+            --collect "XPlat Code Coverage" \
+            --verbosity "$DOTNET_VERBOSITY"
+
+      - name: "[DEV] Assemble unit-test predicate"
+        run: |
+          python3 - <<'PYEOF'
+          import json, xml.etree.ElementTree as ET, os, datetime
+
+          def parse_trx(path):
+              try:
+                  root = ET.parse(path).getroot()
+                  ns = {'t': 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010'}
+                  c = root.find('.//t:Counters', ns)
+                  if c is not None:
+                      total  = int(c.get('total', 0))
+                      passed = int(c.get('passed', 0))
+                      failed = int(c.get('failed', 0))
+                      return {'total':total,'passed':passed,'failed':failed,'ok':failed==0}
+              except Exception as e:
+                  return {'total':0,'passed':0,'failed':0,'ok':False,'error':str(e)}
+              return {'total':0,'passed':0,'failed':0,'ok':False}
+
+          unit = parse_trx('reports/unit.trx')
+          overall = 'PASSED' if unit['ok'] else 'FAILED'
+          predicate = {
+              'name': 'digi-document-management unit test results',
+              'stage': 'DEV',
+              'result': overall,
+              'build': os.environ['VERSION'],
+              'suites': {
+                  'unit': {'tool':'xunit','passed':unit['passed'],'failed':unit['failed'],'total':unit['total']},
+              },
+              'timestamp': datetime.datetime.utcnow().isoformat() + 'Z',
+          }
+          with open('reports/unit-predicate.json','w') as f:
+              json.dump(predicate, f, indent=2)
+          print(json.dumps(predicate, indent=2))
+          if overall == 'FAILED':
+              raise SystemExit(1)
+          PYEOF
+
+      - name: "[DEV] Evidence — unit test results (docker + helm)"
+        run: |
+          jf evd create \
+            --package-name "$IMAGE_NAME" --package-version "$VERSION" --package-repo-name "$DOCKER_LOCAL_REPO" \
+            --predicate reports/unit-predicate.json \
+            --predicate-type "https://jfrog.com/evidence/testing-results/v1" \
+            --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
           jf evd create \
             --package-name "$IMAGE_NAME" --package-version "$VERSION" \
             --package-repo-name "$HELM_LOCAL_REPO" \
-            --predicate reports/test-results-predicate.json \
+            --predicate reports/unit-predicate.json \
             --predicate-type "https://jfrog.com/evidence/testing-results/v1" \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
 
@@ -250,7 +247,7 @@ jobs:
             --project "$PROJECT_KEY" 2>&1) && RC=0 || RC=$?
           echo "$OUTPUT"
           if echo "$OUTPUT" | grep -q "already exists"; then
-            echo "Release bundle $IMAGE_NAME/$VERSION already exists — skipping (re-run at same version)"
+            echo "Release bundle $IMAGE_NAME/$VERSION already exists — skipping"
           elif [ $RC -ne 0 ]; then
             exit $RC
           fi
@@ -262,12 +259,159 @@ jobs:
           if echo "$OUTPUT" | grep -qi "already\|409"; then echo "already at DEV"
           elif [ $RC -ne 0 ]; then exit $RC; fi
 
+      # ═══════════════════════════════════════════════════════════════
+      # QA STAGE — functional/integration tests gate QA → STAGING
+      # ═══════════════════════════════════════════════════════════════
+      - name: "[QA] Functional tests (dotnet WebApplicationFactory)"
+        run: |
+          dotnet test tests/DigiDocumentManagement.FunctionalTests \
+            --logger "trx;LogFileName=functional.trx" \
+            --results-directory reports \
+            --verbosity "$DOTNET_VERBOSITY"
+
+      - name: "[QA] Assemble functional-test predicate"
+        run: |
+          python3 - <<'PYEOF'
+          import json, xml.etree.ElementTree as ET, os, datetime
+
+          def parse_trx(path):
+              try:
+                  root = ET.parse(path).getroot()
+                  ns = {'t': 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010'}
+                  c = root.find('.//t:Counters', ns)
+                  if c is not None:
+                      total  = int(c.get('total', 0))
+                      passed = int(c.get('passed', 0))
+                      failed = int(c.get('failed', 0))
+                      return {'total':total,'passed':passed,'failed':failed,'ok':failed==0}
+              except Exception as e:
+                  return {'total':0,'passed':0,'failed':0,'ok':False,'error':str(e)}
+              return {'total':0,'passed':0,'failed':0,'ok':False}
+
+          func = parse_trx('reports/functional.trx')
+          overall = 'PASSED' if func['ok'] else 'FAILED'
+          predicate = {
+              'name': 'digi-document-management functional test results',
+              'stage': 'QA',
+              'result': overall,
+              'build': os.environ['VERSION'],
+              'suites': {
+                  'functional': {'tool':'xunit+WebApplicationFactory','passed':func['passed'],'failed':func['failed'],'total':func['total']},
+              },
+              'timestamp': datetime.datetime.utcnow().isoformat() + 'Z',
+          }
+          with open('reports/functional-predicate.json','w') as f:
+              json.dump(predicate, f, indent=2)
+          print(json.dumps(predicate, indent=2))
+          if overall == 'FAILED':
+              raise SystemExit(1)
+          PYEOF
+
+      - name: "[QA] Evidence — functional test results (docker + helm)"
+        run: |
+          jf evd create \
+            --package-name "$IMAGE_NAME" --package-version "$VERSION" --package-repo-name "$DOCKER_LOCAL_REPO" \
+            --predicate reports/functional-predicate.json \
+            --predicate-type "https://jfrog.com/evidence/integration-results/v1" \
+            --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
+          jf evd create \
+            --package-name "$IMAGE_NAME" --package-version "$VERSION" \
+            --package-repo-name "$HELM_LOCAL_REPO" \
+            --predicate reports/functional-predicate.json \
+            --predicate-type "https://jfrog.com/evidence/integration-results/v1" \
+            --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
+
       - name: Promote release bundle → QA
         run: |
           OUTPUT=$(jf rbp "$IMAGE_NAME" "$VERSION" QA --project "$PROJECT_KEY" 2>&1) && RC=0 || RC=$?
           echo "$OUTPUT"
           if echo "$OUTPUT" | grep -qi "already\|409"; then echo "already at QA"
           elif [ $RC -ne 0 ]; then exit $RC; fi
+
+      # ═══════════════════════════════════════════════════════════════
+      # STAGING STAGE — k6 performance tests gate STAGING → PROD
+      # ═══════════════════════════════════════════════════════════════
+      - name: "[STAGING] Install k6"
+        run: |
+          K6_VER=v0.55.0
+          curl -sSL "https://github.com/grafana/k6/releases/download/${K6_VER}/k6-${K6_VER}-linux-amd64.tar.gz" \
+            | tar -xzf - --wildcards "*/k6" --strip-components=1 -C /usr/local/bin
+          k6 version
+
+      - name: "[STAGING] Performance test — k6 (real)"
+        run: |
+          mkdir -p reports
+          # Start the service using the already-compiled binary
+          dotnet run --project src/DigiDocumentManagement -c Release --no-build \
+            --urls http://127.0.0.1:8765 &
+          SVC_PID=$!
+          # Wait up to 30 s for the HTTP server to accept connections
+          for i in $(seq 1 30); do
+            curl -s http://127.0.0.1:8765/ >/dev/null 2>&1 && echo "Service ready after ${i}s" && break || sleep 1
+          done
+          # Run k6: 5 VUs, 20 seconds
+          PERF_BASE_URL=http://127.0.0.1:8765 VUS=5 DURATION=20s \
+            k6 run tests/performance/load-test.js \
+            --summary-export reports/k6-summary.json 2>&1 || true
+          kill $SVC_PID 2>/dev/null || true
+          ls reports/k6-summary.json 2>/dev/null || echo "No k6 summary output"
+
+      - name: "[STAGING] Assemble performance predicate"
+        run: |
+          python3 - <<'PYEOF'
+          import json, os, datetime
+
+          def parse_k6(path, perf_out):
+              result = {'total_requests':0,'failure_rate':0.0,'p95_ms':0.0,'passed':False}
+              try:
+                  with open(path) as f:
+                      d = json.load(f)
+                  m = d.get('metrics', {})
+                  p95       = m.get('http_req_duration', {}).get('values', {}).get('p(95)', 0)
+                  fail_rate = m.get('http_req_failed',   {}).get('values', {}).get('rate', 0)
+                  total     = int(m.get('http_reqs',     {}).get('values', {}).get('count', 0))
+                  result = {
+                      'total_requests': total,
+                      'failure_rate':   round(fail_rate, 4),
+                      'p95_ms':         round(p95, 1),
+                      'passed':         fail_rate < 0.01 and p95 < 300,
+                  }
+              except Exception as e:
+                  result['error'] = str(e)
+              with open(perf_out, 'w') as f:
+                  json.dump(result, f, indent=2)
+              return result
+
+          perf = parse_k6('reports/k6-summary.json', 'reports/performance.json')
+          overall = 'PASSED' if perf['passed'] else 'FAILED'
+          predicate = {
+              'name': 'digi-document-management performance test results',
+              'stage': 'STAGING',
+              'result': overall,
+              'build': os.environ['VERSION'],
+              'suites': {
+                  'performance': {'tool':'k6','total_requests':perf['total_requests'],
+                                  'p95_ms':perf['p95_ms'],'failure_rate':perf['failure_rate'],
+                                  'passed':perf['passed']},
+              },
+              'timestamp': datetime.datetime.utcnow().isoformat() + 'Z',
+          }
+          with open('reports/perf-predicate.json','w') as f:
+              json.dump(predicate, f, indent=2)
+          print(json.dumps(predicate, indent=2))
+          if overall == 'FAILED':
+              raise SystemExit(1)
+          PYEOF
+
+      - name: "[STAGING] Evidence — performance test results (docker)"
+        run: |
+          jf evd create \
+            --package-name "$IMAGE_NAME" --package-version "$VERSION" --package-repo-name "$DOCKER_LOCAL_REPO" \
+            --predicate reports/perf-predicate.json \
+            --predicate-type "https://jfrog.com/evidence/performance-results/v1" \
+            --attach-local reports/performance.json \
+            --attach-artifactory-temp-path "$GENERIC_LOCAL_REPO/$IMAGE_NAME/${{ github.run_number }}/evidence-temp" \
+            --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
 
       - name: Promote release bundle → STAGING
         run: |
@@ -276,6 +420,9 @@ jobs:
           if echo "$OUTPUT" | grep -qi "already\|409"; then echo "already at STAGING"
           elif [ $RC -ne 0 ]; then exit $RC; fi
 
+      # ═══════════════════════════════════════════════════════════════
+      # PROD STAGE
+      # ═══════════════════════════════════════════════════════════════
       - name: Promote release bundle → PROD
         run: |
           OUTPUT=$(jf rbp "$IMAGE_NAME" "$VERSION" PROD --project "$PROJECT_KEY" 2>&1) && RC=0 || RC=$?
@@ -283,16 +430,23 @@ jobs:
           if echo "$OUTPUT" | grep -qi "already\|409"; then echo "already at PROD"
           elif [ $RC -ne 0 ]; then exit $RC; fi
 
+      # ---------------------------------------------------------------
+      # POST-PROD — upload reports, bundle evidence, AppTrust, version bump
+      # ---------------------------------------------------------------
+      - name: Upload test reports
+        run: |
+          jf rt upload "reports/*" "$GENERIC_LOCAL_REPO/$IMAGE_NAME/${{ github.run_number }}/reports/" \
+            --flat=false
+
       - name: Evidence — test results (release bundle)
         run: |
           jf evd create \
             --release-bundle "$IMAGE_NAME" --release-bundle-version "$VERSION" \
             --project "$PROJECT_KEY" \
-            --predicate reports/test-results-predicate.json \
+            --predicate reports/unit-predicate.json \
             --predicate-type "https://jfrog.com/evidence/testing-results/v1" \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
 
-      # ---------- APPTRUST ----------
       - name: Update DocPortal manifest and create AppTrust version
         run: |
           MANIFEST_REPO="docportal-client-portal-generic-dev-local"
