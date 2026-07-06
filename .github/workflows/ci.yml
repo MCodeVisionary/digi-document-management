@@ -154,9 +154,19 @@ jobs:
             --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}"
 
       - name: Attest Helm chart
+        id: attest-helm
         uses: actions/attest-build-provenance@v1
         with:
           subject-path: 'digi-document-management-[0-9]*.tgz'
+
+      - name: Push Helm attestation to JFrog evidence
+        run: |
+          jf evd create \
+            --package-name "$IMAGE_NAME" --package-version "$VERSION" \
+            --package-repo-name "$HELM_LOCAL_REPO" \
+            --predicate "${{ steps.attest-helm.outputs.bundle-path }}" \
+            --predicate-type "https://slsa.dev/provenance/v1" \
+            --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
 
       - name: Publish build-info
         run: jf rt build-publish "$IMAGE_NAME" "${{ github.run_number }}" --project "$PROJECT_KEY"
