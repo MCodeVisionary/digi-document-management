@@ -13,7 +13,6 @@ on:
 permissions:
   id-token: write
   contents: write
-  attestations: write
 
 env:
   JF_URL: ${{ vars.JF_URL }}
@@ -140,12 +139,20 @@ jobs:
           echo "digest=$(jq -r '.["containerimage.digest"]' build-metadata)" >> $GITHUB_OUTPUT
           echo "registry=${JF_URL#https://}" >> $GITHUB_OUTPUT
 
-      - name: Attest Docker image
-        uses: actions/attest-build-provenance@v1
-        with:
-          subject-name: ${{ steps.docker-build.outputs.registry }}/${{ env.DOCKER_REPO }}/${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.docker-build.outputs.digest }}
-          push-to-registry: true
+      - name: Provenance — Docker image
+        run: |
+          cat > provenance-docker.json <<JSON
+          { "buildType": "https://github.com/actions/workflow",
+            "builder": { "id": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" },
+            "invocation": { "configSource": { "uri": "git+${{ github.server_url }}/${{ github.repository }}@${{ github.ref }}",
+              "digest": { "sha1": "${{ github.sha }}" } } } }
+          JSON
+          jf evd create \
+            --package-name "$IMAGE_NAME" --package-version "$VERSION" \
+            --package-repo-name "$DOCKER_LOCAL_REPO" \
+            --predicate "provenance-docker.json" \
+            --predicate-type "https://slsa.dev/provenance/v1" \
+            --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
 
       - name: Package & push Helm chart
         run: |
@@ -153,18 +160,18 @@ jobs:
           jf rt upload "digi-document-management-${VERSION}.tgz" "$HELM_LOCAL_REPO/" \
             --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}"
 
-      - name: Attest Helm chart
-        id: attest-helm
-        uses: actions/attest-build-provenance@v1
-        with:
-          subject-path: 'digi-document-management-[0-9]*.tgz'
-
-      - name: Push Helm attestation to JFrog evidence
+      - name: Provenance — Helm chart
         run: |
+          cat > provenance-helm.json <<JSON
+          { "buildType": "https://github.com/actions/workflow",
+            "builder": { "id": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" },
+            "invocation": { "configSource": { "uri": "git+${{ github.server_url }}/${{ github.repository }}@${{ github.ref }}",
+              "digest": { "sha1": "${{ github.sha }}" } } } }
+          JSON
           jf evd create \
             --package-name "$IMAGE_NAME" --package-version "$VERSION" \
             --package-repo-name "$HELM_LOCAL_REPO" \
-            --predicate "${{ steps.attest-helm.outputs.bundle-path }}" \
+            --predicate "provenance-helm.json" \
             --predicate-type "https://slsa.dev/provenance/v1" \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
 
