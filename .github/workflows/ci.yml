@@ -13,6 +13,7 @@ on:
 permissions:
   id-token: write
   contents: write
+  attestations: write
 
 env:
   JF_URL: ${{ vars.JF_URL }}
@@ -130,17 +131,32 @@ jobs:
         run: jf docker login "${JF_URL#https://}"
 
       - name: Build & push Docker image
+        id: docker-build
         run: |
           docker build -t "${JF_URL#https://}/$DOCKER_REPO/$IMAGE_NAME:$VERSION" \
             --metadata-file build-metadata --output=type=image --push .
           jf rt build-docker-create "$DOCKER_LOCAL_REPO" --image-file build-metadata \
             --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}"
+          echo "digest=$(jq -r '.["containerimage.digest"]' build-metadata)" >> $GITHUB_OUTPUT
+          echo "registry=${JF_URL#https://}" >> $GITHUB_OUTPUT
+
+      - name: Attest Docker image
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ steps.docker-build.outputs.registry }}/${{ env.DOCKER_REPO }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.docker-build.outputs.digest }}
+          push-to-registry: true
 
       - name: Package & push Helm chart
         run: |
           helm package helm/digi-document-management --version "$VERSION" --app-version "$VERSION"
           jf rt upload "digi-document-management-${VERSION}.tgz" "$HELM_LOCAL_REPO/" \
             --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}"
+
+      - name: Attest Helm chart
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: 'digi-document-management-[0-9]*.tgz'
 
       - name: Publish build-info
         run: jf rt build-publish "$IMAGE_NAME" "${{ github.run_number }}" --project "$PROJECT_KEY"
