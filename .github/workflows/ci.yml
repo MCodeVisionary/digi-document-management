@@ -142,10 +142,12 @@ jobs:
       - name: Provenance — Docker image
         run: |
           cat > provenance-docker.json <<JSON
-          { "buildType": "https://github.com/actions/workflow",
-            "builder": { "id": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" },
-            "invocation": { "configSource": { "uri": "git+${{ github.server_url }}/${{ github.repository }}@${{ github.ref }}",
-              "digest": { "sha1": "${{ github.sha }}" } } } }
+          { "buildDefinition": {
+              "buildType": "https://slsa.dev/github-actions-workflow/v1",
+              "externalParameters": { "workflow": { "repository": "https://github.com/${{ github.repository }}", "ref": "${{ github.ref }}", "path": ".github/workflows/ci.yml" } },
+              "resolvedDependencies": [{ "uri": "git+https://github.com/${{ github.repository }}@${{ github.ref }}", "digest": { "gitCommit": "${{ github.sha }}" } }] },
+            "runDetails": { "builder": { "id": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" },
+              "metadata": { "invocationId": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" } } }
           JSON
           jf evd create \
             --package-name "$IMAGE_NAME" --package-version "$VERSION" \
@@ -163,10 +165,12 @@ jobs:
       - name: Provenance — Helm chart
         run: |
           cat > provenance-helm.json <<JSON
-          { "buildType": "https://github.com/actions/workflow",
-            "builder": { "id": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" },
-            "invocation": { "configSource": { "uri": "git+${{ github.server_url }}/${{ github.repository }}@${{ github.ref }}",
-              "digest": { "sha1": "${{ github.sha }}" } } } }
+          { "buildDefinition": {
+              "buildType": "https://slsa.dev/github-actions-workflow/v1",
+              "externalParameters": { "workflow": { "repository": "https://github.com/${{ github.repository }}", "ref": "${{ github.ref }}", "path": ".github/workflows/ci.yml" } },
+              "resolvedDependencies": [{ "uri": "git+https://github.com/${{ github.repository }}@${{ github.ref }}", "digest": { "gitCommit": "${{ github.sha }}" } }] },
+            "runDetails": { "builder": { "id": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" },
+              "metadata": { "invocationId": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" } } }
           JSON
           jf evd create \
             --package-name "$IMAGE_NAME" --package-version "$VERSION" \
@@ -191,10 +195,12 @@ jobs:
       - name: Evidence — SLSA provenance (on build)
         run: |
           cat > provenance.json <<JSON
-          { "buildType":"https://github.com/actions/workflow",
-            "builder": { "id":"https://github.com/${{ github.repository }}/actions" },
-            "invocation": { "configSource": { "uri":"git+${{ github.server_url }}/${{ github.repository }}",
-              "digest": {"sha1":"${{ github.sha }}"}, "entryPoint":".github/workflows/ci.yml" } } }
+          { "buildDefinition": {
+              "buildType": "https://slsa.dev/github-actions-workflow/v1",
+              "externalParameters": { "workflow": { "repository": "https://github.com/${{ github.repository }}", "ref": "${{ github.ref }}", "path": ".github/workflows/ci.yml" } },
+              "resolvedDependencies": [{ "uri": "git+https://github.com/${{ github.repository }}@${{ github.ref }}", "digest": { "gitCommit": "${{ github.sha }}" } }] },
+            "runDetails": { "builder": { "id": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" },
+              "metadata": { "invocationId": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" } } }
           JSON
           jf evd create --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}" \
             --project "$PROJECT_KEY" \
