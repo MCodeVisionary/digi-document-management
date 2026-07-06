@@ -162,7 +162,8 @@ jobs:
         run: |
           helm package helm/digi-document-management --version "$VERSION" --app-version "$VERSION"
           jf rt upload "digi-document-management-${VERSION}.tgz" "$HELM_LOCAL_REPO/" \
-            --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}"
+            --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}" \
+            --module "$IMAGE_NAME-helm"
 
       - name: Provenance — Helm chart
         run: |
