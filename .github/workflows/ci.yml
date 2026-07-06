@@ -505,74 +505,38 @@ jobs:
             --predicate-type "https://jfrog.com/evidence/testing-results/v1" \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
 
-      - name: Update DocPortal manifest and create AppTrust version
+      - name: AppTrust — register application version
         run: |
-          MANIFEST_REPO="docportal-client-portal-generic-dev-local"
-          MANIFEST_KEY="docportal/manifest.json"
-
-          jf rt download "${MANIFEST_REPO}/${MANIFEST_KEY}" . --flat 2>/dev/null || true
-          [ -f manifest.json ] || echo '{}' > manifest.json
-
-          jq --arg svc "$IMAGE_NAME" --arg ver "$VERSION" \
-            '.[$svc] = $ver | .["docportal-version"] = ((.["docportal-version"] // "0" | tonumber) + 1 | tostring)' \
-            manifest.json > manifest.json.tmp && mv manifest.json.tmp manifest.json
-          cat manifest.json
-
-          jf rt upload manifest.json "${MANIFEST_REPO}/${MANIFEST_KEY}"
-
-          CP_VER=$(jq -r '.["digi-client-portal"] // ""' manifest.json)
-          DC_VER=$(jq -r '.["digi-document-converter"] // ""' manifest.json)
-          DM_VER=$(jq -r '.["digi-document-management"] // ""' manifest.json)
-          DOCPORTAL_VER=$(jq -r '.["docportal-version"] // "1"' manifest.json)
-
-          echo "DocPortal v${DOCPORTAL_VER} = client-portal:${CP_VER} + doc-converter:${DC_VER} + doc-management:${DM_VER}"
-
           OUTPUT=$(jf apptrust app-create "$APP_KEY" \
             --application-name "DocPortal" --project "$PROJECT_KEY" 2>&1) && RC=0 || RC=$?
-          echo "$OUTPUT"
           if echo "$OUTPUT" | grep -q "already exists"; then
-            echo "AppTrust application $APP_KEY already exists — skipping"
+            echo "AppTrust application $APP_KEY already exists"
           elif [ $RC -ne 0 ]; then exit $RC; fi
 
-          if [ -n "$CP_VER" ] && [ -n "$DC_VER" ] && [ -n "$DM_VER" ]; then
-            OUTPUT=$(jf apptrust version-create "$APP_KEY" "$DOCPORTAL_VER" \
-              --skip-unassigned \
-              --source-type-release-bundles \
-              "name=digi-client-portal, version=${CP_VER}, project-key=${PROJECT_KEY}; name=digi-document-converter, version=${DC_VER}, project-key=${PROJECT_KEY}; name=digi-document-management, version=${DM_VER}, project-key=${PROJECT_KEY}" 2>&1) && RC=0 || RC=$?
-            echo "$OUTPUT"
-            if echo "$OUTPUT" | grep -qi "not found\|source not found"; then
-              echo "Skipping AppTrust version — one or more bundles not yet available (stale manifest)"
-              echo "  client-portal=${CP_VER} doc-converter=${DC_VER} doc-management=${DM_VER}"
-            elif echo "$OUTPUT" | grep -qi "already exists"; then
-              echo "AppTrust version $DOCPORTAL_VER already exists — promoting"
-              PROMOTE=1
-            elif [ $RC -ne 0 ]; then
-              exit $RC
-            else
-              PROMOTE=1
-            fi
-            if [ "${PROMOTE:-0}" = "1" ]; then
-              for STAGE in QA STAGING; do
-                PROMO=$(jf apptrust version-promote "$APP_KEY" "$DOCPORTAL_VER" "$STAGE" 2>&1) && PRC=0 || PRC=$?
-                echo "$PROMO"
-                if echo "$PROMO" | grep -qi "already\|409"; then
-                  echo "AppTrust version $DOCPORTAL_VER already at or past $STAGE"
-                elif [ $PRC -ne 0 ]; then
-                  echo "Warning: could not promote AppTrust version $DOCPORTAL_VER to $STAGE — $PROMO"
-                fi
-              done
-              # PROD is a Release stage — requires version-release, not version-promote
-              REL=$(jf apptrust version-release "$APP_KEY" "$DOCPORTAL_VER" 2>&1) && RRC=0 || RRC=$?
-              echo "$REL"
-              if echo "$REL" | grep -qi "already\|409"; then
-                echo "AppTrust version $DOCPORTAL_VER already released"
-              elif [ $RRC -ne 0 ]; then
-                echo "Warning: could not release AppTrust version $DOCPORTAL_VER — $REL"
-              fi
-            fi
-          else
-            echo "Skipping DocPortal version — not all services in manifest yet"
-            echo "  client-portal=${CP_VER:-MISSING} doc-converter=${DC_VER:-MISSING} doc-management=${DM_VER:-MISSING}"
+          OUTPUT=$(jf apptrust version-create "$APP_KEY" "$VERSION-${{ github.run_number }}" \
+            --source-type-builds "name=$IMAGE_NAME, id=${{ github.run_number }}" \
+            --tag "$IMAGE_NAME" 2>&1) && RC=0 || RC=$?
+          if echo "$OUTPUT" | grep -qi "already exists"; then
+            echo "AppTrust version $VERSION-${{ github.run_number }} already exists"
+          elif [ $RC -ne 0 ]; then
+            echo "Warning: AppTrust version-create failed — $OUTPUT"
+          fi
+
+          echo "{ \"service\": \"$IMAGE_NAME\", \"version\": \"$VERSION\", \"actor\": \"${{ github.actor }}\", \"date\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\" }" > app-release.json
+          jf evd create \
+            --release-bundle "$IMAGE_NAME" --release-bundle-version "$VERSION" \
+            --application-key "$APP_KEY" --application-version "$VERSION-${{ github.run_number }}" \
+            --project "$PROJECT_KEY" \
+            --predicate app-release.json \
+            --predicate-type "https://jfrog.com/evidence/release-notes/v1" \
+            --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
+
+          OUTPUT=$(jf apptrust version-release "$APP_KEY" "$VERSION-${{ github.run_number }}" \
+            --sync true 2>&1) && RC=0 || RC=$?
+          if echo "$OUTPUT" | grep -qi "already\|409"; then
+            echo "AppTrust version already released"
+          elif [ $RC -ne 0 ]; then
+            echo "Warning: AppTrust version-release failed — $OUTPUT"
           fi
 
       - name: Bump patch version
