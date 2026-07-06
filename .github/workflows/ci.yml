@@ -496,7 +496,7 @@ jobs:
               PROMOTE=1
             fi
             if [ "${PROMOTE:-0}" = "1" ]; then
-              for STAGE in QA STAGING PROD; do
+              for STAGE in QA STAGING; do
                 PROMO=$(jf apptrust version-promote "$APP_KEY" "$DOCPORTAL_VER" "$STAGE" 2>&1) && PRC=0 || PRC=$?
                 echo "$PROMO"
                 if echo "$PROMO" | grep -qi "already\|409"; then
@@ -505,6 +505,14 @@ jobs:
                   echo "Warning: could not promote AppTrust version $DOCPORTAL_VER to $STAGE — $PROMO"
                 fi
               done
+              # PROD is a Release stage — requires version-release, not version-promote
+              REL=$(jf apptrust version-release "$APP_KEY" "$DOCPORTAL_VER" 2>&1) && RRC=0 || RRC=$?
+              echo "$REL"
+              if echo "$REL" | grep -qi "already\|409"; then
+                echo "AppTrust version $DOCPORTAL_VER already released"
+              elif [ $RRC -ne 0 ]; then
+                echo "Warning: could not release AppTrust version $DOCPORTAL_VER — $REL"
+              fi
             fi
           else
             echo "Skipping DocPortal version — not all services in manifest yet"
