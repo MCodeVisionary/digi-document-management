@@ -86,7 +86,7 @@ jobs:
         continue-on-error: true
         run: |
           jf nugetc --repo-resolve "$NUGET_REPO" --server-id-resolve "$SETUP_JFROG_CLI_SERVER_IDS"
-          jf curation-audit
+          jf ca
 
       # ---------------------------------------------------------------
       # BUILD  (restore + compile; tests run per-stage below)
@@ -121,14 +121,11 @@ jobs:
         run: jf docker login "${JF_URL#https://}"
 
       - name: Build & push Docker image
-        id: docker-build
         run: |
-          docker build -t "${JF_URL#https://}/$DOCKER_REPO/$IMAGE_NAME:$VERSION" \
-            --metadata-file build-metadata --output=type=image --push .
-          jf rt build-docker-create "$DOCKER_LOCAL_REPO" --image-file build-metadata \
+          jf docker build -t "${JF_URL#https://}/$DOCKER_REPO/$IMAGE_NAME:$VERSION" .
+          jf docker scan "${JF_URL#https://}/$DOCKER_REPO/$IMAGE_NAME:$VERSION"
+          jf docker push "${JF_URL#https://}/$DOCKER_REPO/$IMAGE_NAME:$VERSION" \
             --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}"
-          echo "digest=$(jq -r '.["containerimage.digest"]' build-metadata)" >> $GITHUB_OUTPUT
-          echo "registry=${JF_URL#https://}" >> $GITHUB_OUTPUT
 
       - name: Provenance — Docker image
         run: |
@@ -147,20 +144,6 @@ jobs:
             --predicate-type "https://slsa.dev/provenance/v1" \
             --provider-id github \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
-
-      - name: Add SonarQube coverage evidence (Docker)
-        run: |
-          jf evd create-evidence \
-            --predicate .jfrog/evidence/sonarqube-coverage.json \
-            --markdown .jfrog/evidence/sonarqube-coverage.md \
-            --predicate-type "https://jfrog.com/evidence/sonarqube/v1" \
-            --project "$PROJECT_KEY" \
-            --package-name "$IMAGE_NAME" \
-            --package-version "$VERSION" \
-            --package-repo-name "$DOCKER_LOCAL_REPO" \
-            --provider-id sonar \
-            --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" \
-            --key-alias "$EVIDENCE_KEY_ALIAS"
 
       - name: Package & push Helm chart
         run: |
@@ -188,24 +171,10 @@ jobs:
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
 
       # ---------------------------------------------------------------
-      # EVIDENCE — CodeQL static analysis + CycloneDX SBOM
+      # EVIDENCE — CodeQL static analysis
       # ---------------------------------------------------------------
       - name: Generate CodeQL evidence files (C#)
         run: bash .github/scripts/generate-dummy-codeql-evidence.sh
-
-      - name: Evidence — CodeQL static analysis (Docker)
-        run: |
-          printf '%s\n' "${{ secrets.EVIDENCE_PRIVATE_KEY }}" > evidence_private_key.pem
-          chmod 600 evidence_private_key.pem
-          jf evd create-evidence \
-            --package-name "$IMAGE_NAME" --package-version "$VERSION" \
-            --package-repo-name "$DOCKER_LOCAL_REPO" \
-            --predicate results-csharp/csharp.sarif \
-            --predicate-type "http://github.com/CodeQL/static-analysis" \
-            --provider-id "github" \
-            --markdown results-csharp/csharp-report.md \
-            --key "$(cat evidence_private_key.pem)" --key-alias "$EVIDENCE_KEY_ALIAS"
-          rm -f evidence_private_key.pem
 
       - name: Collect build environment
         run: jf rt build-collect-env "$IMAGE_NAME" "${{ github.run_number }}" --project "$PROJECT_KEY"
@@ -215,7 +184,7 @@ jobs:
 
       - name: Xray scan (wait for completion)
         run: |
-          OUTPUT=$(jf rt build-scan "$IMAGE_NAME" "${{ github.run_number }}" --project "$PROJECT_KEY" 2>&1) && RC=0 || RC=$?
+          OUTPUT=$(jf build-scan "$IMAGE_NAME" "${{ github.run_number }}" --project "$PROJECT_KEY" 2>&1) && RC=0 || RC=$?
           echo "$OUTPUT"
           sleep 30
           # RC=3 means scan completed but Xray found policy violations — non-blocking
@@ -246,6 +215,31 @@ jobs:
             --project "$PROJECT_KEY" \
             --predicate build-sig.json --predicate-type "https://jfrog.com/evidence/build-signature/v1" \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
+
+      - name: Evidence — SonarQube quality gate (build)
+        run: |
+          jf evd create \
+            --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}" \
+            --project "$PROJECT_KEY" \
+            --predicate .jfrog/evidence/sonarqube-coverage.json \
+            --markdown .jfrog/evidence/sonarqube-coverage.md \
+            --predicate-type "https://jfrog.com/evidence/sonarqube/v1" \
+            --provider-id sonar \
+            --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
+
+      - name: Evidence — CodeQL static analysis (build)
+        run: |
+          printf '%s\n' "${{ secrets.EVIDENCE_PRIVATE_KEY }}" > evidence_private_key.pem
+          chmod 600 evidence_private_key.pem
+          jf evd create \
+            --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}" \
+            --project "$PROJECT_KEY" \
+            --predicate results-csharp/csharp.sarif \
+            --predicate-type "http://github.com/CodeQL/static-analysis" \
+            --provider-id "github" \
+            --markdown results-csharp/csharp-report.md \
+            --key "$(cat evidence_private_key.pem)" --key-alias "$EVIDENCE_KEY_ALIAS"
+          rm -f evidence_private_key.pem
 
       # ═══════════════════════════════════════════════════════════════
       # DEV STAGE — unit tests gate DEV → QA promotion
@@ -297,23 +291,18 @@ jobs:
               raise SystemExit(1)
           PYEOF
 
-      - name: "[DEV] Evidence — unit test results (docker + helm)"
+      - name: "[DEV] Evidence — unit test results (build)"
         run: |
           jf evd create \
-            --package-name "$IMAGE_NAME" --package-version "$VERSION" --package-repo-name "$DOCKER_LOCAL_REPO" \
-            --predicate reports/unit-predicate.json \
-            --predicate-type "https://jfrog.com/evidence/testing-results/v1" \
-            --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
-          jf evd create \
-            --package-name "$IMAGE_NAME" --package-version "$VERSION" \
-            --package-repo-name "$HELM_LOCAL_REPO" \
+            --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}" \
+            --project "$PROJECT_KEY" \
             --predicate reports/unit-predicate.json \
             --predicate-type "https://jfrog.com/evidence/testing-results/v1" \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
 
       - name: Create release bundle
         run: |
-          OUTPUT=$(jf rbc "$IMAGE_NAME" "$VERSION" \
+          OUTPUT=$(jf release-bundle-create "$IMAGE_NAME" "$VERSION" \
             --source-type-builds "name=$IMAGE_NAME, id=${{ github.run_number }}" \
             --project "$PROJECT_KEY" 2>&1) && RC=0 || RC=$?
           echo "$OUTPUT"
@@ -325,7 +314,7 @@ jobs:
 
       - name: Promote release bundle → DEV
         run: |
-          OUTPUT=$(jf rbp "$IMAGE_NAME" "$VERSION" DEV --project "$PROJECT_KEY" 2>&1) && RC=0 || RC=$?
+          OUTPUT=$(jf release-bundle-promote "$IMAGE_NAME" "$VERSION" DEV --project "$PROJECT_KEY" 2>&1) && RC=0 || RC=$?
           echo "$OUTPUT"
           if echo "$OUTPUT" | grep -qi "already\|409"; then echo "already at DEV"
           elif [ $RC -ne 0 ]; then exit $RC; fi
@@ -378,23 +367,18 @@ jobs:
               raise SystemExit(1)
           PYEOF
 
-      - name: "[QA] Evidence — functional test results (docker + helm)"
+      - name: "[QA] Evidence — functional test results (build)"
         run: |
           jf evd create \
-            --package-name "$IMAGE_NAME" --package-version "$VERSION" --package-repo-name "$DOCKER_LOCAL_REPO" \
-            --predicate reports/functional-predicate.json \
-            --predicate-type "https://jfrog.com/evidence/integration-results/v1" \
-            --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
-          jf evd create \
-            --package-name "$IMAGE_NAME" --package-version "$VERSION" \
-            --package-repo-name "$HELM_LOCAL_REPO" \
+            --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}" \
+            --project "$PROJECT_KEY" \
             --predicate reports/functional-predicate.json \
             --predicate-type "https://jfrog.com/evidence/integration-results/v1" \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
 
       - name: Promote release bundle → QA
         run: |
-          OUTPUT=$(jf rbp "$IMAGE_NAME" "$VERSION" QA --project "$PROJECT_KEY" 2>&1) && RC=0 || RC=$?
+          OUTPUT=$(jf release-bundle-promote "$IMAGE_NAME" "$VERSION" QA --project "$PROJECT_KEY" 2>&1) && RC=0 || RC=$?
           echo "$OUTPUT"
           if echo "$OUTPUT" | grep -qi "already\|409"; then echo "already at QA"
           elif [ $RC -ne 0 ]; then exit $RC; fi
@@ -476,10 +460,11 @@ jobs:
               raise SystemExit(1)
           PYEOF
 
-      - name: "[STAGING] Evidence — performance test results (docker)"
+      - name: "[STAGING] Evidence — performance test results (build)"
         run: |
           jf evd create \
-            --package-name "$IMAGE_NAME" --package-version "$VERSION" --package-repo-name "$DOCKER_LOCAL_REPO" \
+            --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}" \
+            --project "$PROJECT_KEY" \
             --predicate reports/perf-predicate.json \
             --predicate-type "https://jfrog.com/evidence/performance-results/v1" \
             --attach-local reports/performance.json \
@@ -488,7 +473,7 @@ jobs:
 
       - name: Promote release bundle → STAGING
         run: |
-          OUTPUT=$(jf rbp "$IMAGE_NAME" "$VERSION" STAGING --project "$PROJECT_KEY" 2>&1) && RC=0 || RC=$?
+          OUTPUT=$(jf release-bundle-promote "$IMAGE_NAME" "$VERSION" STAGING --project "$PROJECT_KEY" 2>&1) && RC=0 || RC=$?
           echo "$OUTPUT"
           if echo "$OUTPUT" | grep -qi "already\|409"; then echo "already at STAGING"
           elif [ $RC -ne 0 ]; then exit $RC; fi
@@ -498,7 +483,7 @@ jobs:
       # ═══════════════════════════════════════════════════════════════
       - name: Promote release bundle → PROD
         run: |
-          OUTPUT=$(jf rbp "$IMAGE_NAME" "$VERSION" PROD --project "$PROJECT_KEY" 2>&1) && RC=0 || RC=$?
+          OUTPUT=$(jf release-bundle-promote "$IMAGE_NAME" "$VERSION" PROD --project "$PROJECT_KEY" 2>&1) && RC=0 || RC=$?
           echo "$OUTPUT"
           if echo "$OUTPUT" | grep -qi "already\|409"; then echo "already at PROD"
           elif [ $RC -ne 0 ]; then exit $RC; fi
