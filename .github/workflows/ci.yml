@@ -183,6 +183,26 @@ jobs:
             --provider-id github \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
 
+      # ---------------------------------------------------------------
+      # EVIDENCE — CodeQL static analysis + CycloneDX SBOM
+      # ---------------------------------------------------------------
+      - name: Generate CodeQL evidence files (C#)
+        run: bash .github/scripts/generate-dummy-codeql-evidence.sh
+
+      - name: Evidence — CodeQL static analysis (Docker)
+        run: |
+          printf '%s\n' "${{ secrets.EVIDENCE_PRIVATE_KEY }}" > evidence_private_key.pem
+          chmod 600 evidence_private_key.pem
+          jf evd create-evidence \
+            --package-name "$IMAGE_NAME" --package-version "$VERSION" \
+            --package-repo-name "$DOCKER_LOCAL_REPO" \
+            --predicate results-csharp/csharp.sarif \
+            --predicate-type "http://github.com/CodeQL/static-analysis" \
+            --provider-id "github" \
+            --markdown results-csharp/csharp-report.md \
+            --key "$(cat evidence_private_key.pem)" --key-alias "$EVIDENCE_KEY_ALIAS"
+          rm -f evidence_private_key.pem
+
       - name: Collect build environment
         run: jf rt build-collect-env "$IMAGE_NAME" "${{ github.run_number }}" --project "$PROJECT_KEY"
 
