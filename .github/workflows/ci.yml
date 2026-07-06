@@ -154,6 +154,7 @@ jobs:
             --package-repo-name "$DOCKER_LOCAL_REPO" \
             --predicate "provenance-docker.json" \
             --predicate-type "https://slsa.dev/provenance/v1" \
+            --provider-id github \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
 
       - name: Package & push Helm chart
@@ -177,6 +178,7 @@ jobs:
             --package-repo-name "$HELM_LOCAL_REPO" \
             --predicate "provenance-helm.json" \
             --predicate-type "https://slsa.dev/provenance/v1" \
+            --provider-id github \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
 
       - name: Publish build-info
