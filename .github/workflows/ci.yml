@@ -188,6 +188,7 @@ jobs:
         run: |
           OUTPUT=$(jf rt build-scan "$IMAGE_NAME" "${{ github.run_number }}" --project "$PROJECT_KEY" 2>&1) && RC=0 || RC=$?
           echo "$OUTPUT"
+          sleep 30
           # RC=3 means scan completed but Xray found policy violations — non-blocking
           if [ $RC -ne 0 ] && [ $RC -ne 3 ]; then exit $RC; fi
 
