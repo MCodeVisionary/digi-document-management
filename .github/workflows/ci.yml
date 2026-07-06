@@ -93,6 +93,7 @@ jobs:
       # ---------------------------------------------------------------
       - name: Restore & build
         run: |
+          dotnet nuget locals all --clear
           jf dotnetc --repo-resolve "$NUGET_REPO" --server-id-resolve "$SETUP_JFROG_CLI_SERVER_IDS"
           jf dotnet restore --build-name "$IMAGE_NAME" --build-number "${{ github.run_number }}"
           dotnet build -c Release --no-restore --verbosity "$DOTNET_VERBOSITY"
@@ -180,6 +181,9 @@ jobs:
             --predicate-type "https://slsa.dev/provenance/v1" \
             --provider-id github \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
+
+      - name: Collect build environment
+        run: jf rt build-collect-env "$IMAGE_NAME" "${{ github.run_number }}" --project "$PROJECT_KEY"
 
       - name: Publish build-info
         run: jf rt build-publish "$IMAGE_NAME" "${{ github.run_number }}" --project "$PROJECT_KEY"
