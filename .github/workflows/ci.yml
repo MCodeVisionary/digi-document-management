@@ -111,18 +111,8 @@ jobs:
           jf dotnetc --repo-resolve "$NUGET_REPO" --server-id-resolve "$SETUP_JFROG_CLI_SERVER_IDS"
           jf audit --nuget
 
-      - name: SonarQube scan
-        continue-on-error: true
-        env:
-          SONAR_TOKEN: dummy-sonar-token
-          SONAR_HOST_URL: http://localhost:9000
-        run: |
-          dotnet tool install --global dotnet-sonarscanner || true
-          export PATH="$PATH:$HOME/.dotnet/tools"
-          dotnet sonarscanner begin /k:"docportal_digi-document-management" \
-            /d:sonar.host.url="$SONAR_HOST_URL" /d:sonar.login="$SONAR_TOKEN" || true
-          dotnet build -c Release --no-incremental || true
-          dotnet sonarscanner end /d:sonar.login="$SONAR_TOKEN" || true
+      - name: Generate SonarQube evidence (validation)
+        run: bash .github/scripts/generate-dummy-sonarqube-evidence.sh
 
       # ---------------------------------------------------------------
       # PUBLISH ARTIFACTS to JFrog  (docker, helm)
@@ -157,6 +147,20 @@ jobs:
             --predicate-type "https://slsa.dev/provenance/v1" \
             --provider-id github \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
+
+      - name: Add SonarQube coverage evidence (Docker)
+        run: |
+          jf evd create-evidence \
+            --predicate .jfrog/evidence/sonarqube-coverage.json \
+            --markdown .jfrog/evidence/sonarqube-coverage.md \
+            --predicate-type "https://jfrog.com/evidence/sonarqube/v1" \
+            --project "$PROJECT_KEY" \
+            --package-name "$IMAGE_NAME" \
+            --package-version "$VERSION" \
+            --package-repo-name "$DOCKER_LOCAL_REPO" \
+            --provider-id sonar \
+            --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" \
+            --key-alias "$EVIDENCE_KEY_ALIAS"
 
       - name: Package & push Helm chart
         run: |
