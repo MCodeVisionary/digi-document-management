@@ -514,7 +514,7 @@ jobs:
           elif [ $RC -ne 0 ]; then exit $RC; fi
 
           OUTPUT=$(jf apptrust version-create "$APP_KEY" "$VERSION-${{ github.run_number }}" \
-            --source-type-release-bundles "name=$IMAGE_NAME, version=$VERSION" \
+            --source-type-release-bundles "name=$IMAGE_NAME, version=$VERSION, project-key=$PROJECT_KEY" \
             --tag "$IMAGE_NAME" 2>&1) && RC=0 || RC=$?
           if echo "$OUTPUT" | grep -qi "already exists"; then
             echo "AppTrust version $VERSION-${{ github.run_number }} already exists"
@@ -531,7 +531,6 @@ jobs:
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
           jf evd create \
             --application-key "$APP_KEY" --application-version "$VERSION-${{ github.run_number }}" \
-            --project "$PROJECT_KEY" \
             --predicate app-release.json \
             --predicate-type "https://jfrog.com/evidence/release-notes/v1" \
             --key "${{ secrets.EVIDENCE_PRIVATE_KEY }}" --key-alias "$EVIDENCE_KEY_ALIAS"
