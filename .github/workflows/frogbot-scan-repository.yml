@@ -10,6 +10,7 @@ permissions:
   contents: write
   pull-requests: write
   security-events: write
+  id-token: write
 
 jobs:
   scan-repository:
@@ -21,8 +22,8 @@ jobs:
           # JFrog platform URL
           JF_URL: ${{ vars.JF_URL }}
 
-          # JFrog access token with read permissions on Xray
-          JF_ACCESS_TOKEN: ${{ secrets.FROGBOT_ACCESS_TOKEN }}
+          # OIDC authentication — no static token needed
+          JF_OPENID_CONNECT_PROVIDER_NAME: github-docportal
 
           # GitHub token — automatically generated for the job
           JF_GIT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
