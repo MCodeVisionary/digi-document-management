@@ -570,7 +570,7 @@ jobs:
               fi
             done
 
-            OUTPUT=$(jf apptrust version-release "$APP_KEY" "$DOCPORTAL_VER" --sync true 2>&1) && RC=0 || RC=$?
+            OUTPUT=$(jf apptrust version-release "$APP_KEY" "$DOCPORTAL_VER" --sync=true 2>&1) && RC=0 || RC=$?
             if echo "$OUTPUT" | grep -qi "already\|409"; then
               echo "AppTrust version $DOCPORTAL_VER already released"
             elif [ $RC -ne 0 ]; then
